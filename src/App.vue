@@ -1,45 +1,186 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, watch } from 'vue'
-import { RouterLink, RouterView, useRouter } from 'vue-router'
-import { DEFAULT_NUMBER_OF_COMPONENTS } from '@/constants'
+import { RouterLink, RouterView, useRouter, type LocationQuery } from 'vue-router'
+import { NEWLINE_TEST, WHITE_MODE_OFFSET } from '@/constants'
 import { ScaleWorkshopOneData } from '@/scale-workshop-one'
 import type { Input, Output } from 'webmidi'
-import { MidiIn, midiKeyInfo, MidiOut, type NoteOff } from 'xen-midi'
-import { Keyboard, type CoordinateKeyboardEvent, COORDS_BY_CODE } from 'isomorphic-qwerty'
-import { decodeQuery } from '@/url-encode'
-import { annotateColors } from '@/utils'
+import { MidiIn, midiKeyInfo, MidiOut } from 'xen-midi'
+import { Keyboard, type CoordinateKeyboardEvent } from 'isomorphic-qwerty'
+import { decodeQuery, encodeQuery, type DecodedState } from '@/url-encode'
+import { debounce } from '@/utils'
 import { version } from '../package.json'
 import { useAudioStore } from '@/stores/audio'
 import { useStateStore } from './stores/state'
 import { useMidiStore } from './stores/midi'
-import { useScaleStore } from './stores/scale'
-import { useHarmonicEntropyStore } from '@/stores/harmonic-entropy'
-import { clamp, mmod } from 'xen-dev-utils'
-import { parseScaleWorkshop2Line, setNumberOfComponents } from 'sonic-weave'
 
 // === Pinia-managed state ===
-const state = useStateStore()
-const scale = useScaleStore()
-const midi = useMidiStore()
 const audio = useAudioStore()
-const entropy = useHarmonicEntropyStore()
+const state = useStateStore()
+const midi = useMidiStore()
 
 // == URL path handling ==
 /**
- * Strip away base path "/"
+ * Strip away base path such as /scaleworkshop-dev/
  */
 function getPath(url: URL) {
   return url.pathname.slice(import.meta.env.BASE_URL.length)
 }
 
+// == State encoding ==
 const router = useRouter()
 
+// Flags to prevent infinite decode - watch - encode loops
+let justEncodedUrl = false
+let justDecodedUrl = false
+
+// Debounced to stagger navigation loops if the flags fail
+const encodeState = debounce(() => {
+  // Navigation loop prevention
+  if (justDecodedUrl) {
+    justDecodedUrl = false
+    return
+  }
+  justEncodedUrl = true
+
+  const decodedState: DecodedState = {
+    scaleName: state.scaleName,
+    scaleSymbols: state.scaleSymbols,
+    scaleLines: state.scaleLines,
+    baseFrequency: state.scale.baseFrequency,
+    baseMidiNote: state.baseMidiNote,
+    keyColors: state.keyColors,
+    isomorphicHorizontal: state.isomorphicHorizontal,
+    isomorphicVertical: state.isomorphicVertical,
+    keyboardMode: state.keyboardMode,
+    pianoMode: state.pianoMode,
+    equaveShift: state.equaveShift,
+    degreeShift: state.degreeShift,
+    waveform: audio.waveform,
+    attackTime: audio.attackTime,
+    decayTime: audio.decayTime,
+    sustainLevel: audio.sustainLevel,
+    releaseTime: audio.releaseTime,
+    pingPongDelayTime: audio.pingPongDelayTime,
+    pingPongFeedback: audio.pingPongFeedback,
+    pingPongSeparation: audio.pingPongSeparation,
+    pingPongGain: audio.pingPongGain
+  }
+
+  const query = encodeQuery(decodedState) as LocationQuery
+  query.version = version
+
+  // XXX: There are some sporadic issues with useRoute().fullPath
+  // so we use native URL.pathname.
+  const url = new URL(window.location.href)
+
+  router.push({ path: getPath(url), query })
+}, 200)
+
+watch(
+  () => [
+    state.scaleName,
+    state.scaleSymbols,
+    state.scaleLines,
+    state.scale.baseFrequency,
+    state.baseMidiNote,
+    state.keyColors,
+    state.isomorphicHorizontal,
+    state.isomorphicVertical,
+    state.keyboardMode,
+    state.pianoMode,
+    state.equaveShift,
+    state.degreeShift,
+    audio.waveform,
+    audio.attackTime,
+    audio.decayTime,
+    audio.sustainLevel,
+    audio.releaseTime,
+    audio.pingPongDelayTime,
+    audio.pingPongFeedback,
+    audio.pingPongSeparation,
+    audio.pingPongGain
+  ],
+  encodeState
+)
+
+// == State decoding ==
+router.afterEach((to, from) => {
+  if (to.fullPath === from.fullPath) {
+    return
+  }
+  // Navigation loop prevention
+  if (justEncodedUrl) {
+    justEncodedUrl = false
+    return
+  }
+
+  // XXX: There are some sporadic issues with useRoute().fullPath
+  // so we use native URL.searchParams.
+  const url = new URL(window.location.href)
+  const query = url.searchParams
+  if (query.has('version')) {
+    try {
+      const decodedState = decodeQuery(query)
+      justDecodedUrl = true
+      state.scaleName = decodedState.scaleName
+      state.scaleSymbols = decodedState.scaleSymbols
+      state.scale.baseFrequency = decodedState.baseFrequency
+      state.baseMidiNote = decodedState.baseMidiNote
+      state.keyColors = decodedState.keyColors
+      state.isomorphicHorizontal = decodedState.isomorphicHorizontal
+      state.isomorphicVertical = decodedState.isomorphicVertical
+      state.keyboardMode = decodedState.keyboardMode
+      state.pianoMode = decodedState.pianoMode
+      state.scaleLines = decodedState.scaleLines
+      state.equaveShift = decodedState.equaveShift
+      state.degreeShift = decodedState.degreeShift
+      audio.waveform = decodedState.waveform
+      audio.attackTime = decodedState.attackTime
+      audio.decayTime = decodedState.decayTime
+      audio.sustainLevel = decodedState.sustainLevel
+      audio.releaseTime = decodedState.releaseTime
+      audio.pingPongDelayTime = decodedState.pingPongDelayTime
+      audio.pingPongFeedback = decodedState.pingPongFeedback
+      audio.pingPongSeparation = decodedState.pingPongSeparation
+      audio.pingPongGain = decodedState.pingPongGain
+    } catch (error) {
+      console.error(`Error parsing version ${query.get('version')} URL`, error)
+    }
+  }
+})
+
 // === Tuning table highlighting ===
+// We use hacks to bypass Vue state management for real-time gains
 function tuningTableKeyOn(index: number) {
+  if (index >= 0 && index < 128) {
+    let tuningTableRow = (window as any).TUNING_TABLE_ROWS[index]
+    if (tuningTableRow === undefined) {
+      tuningTableRow = { heldKeys: 0, element: null }
+    }
+    tuningTableRow.heldKeys++
+    if (tuningTableRow.element?._rawValue) {
+      tuningTableRow.element._rawValue.classList.add('active')
+    }
+    ;(window as any).TUNING_TABLE_ROWS[index] = tuningTableRow
+  }
+  // Virtual keyboard state is too complex so we take the performance hit.
   state.heldNotes.set(index, (state.heldNotes.get(index) ?? 0) + 1)
 }
 
 function tuningTableKeyOff(index: number) {
+  if (index >= 0 && index < 128) {
+    let tuningTableRow = (window as any).TUNING_TABLE_ROWS[index]
+    if (tuningTableRow === undefined) {
+      tuningTableRow = { heldKeys: 0, element: null }
+    }
+    tuningTableRow.heldKeys--
+    if (tuningTableRow.element?._rawValue) {
+      if (!tuningTableRow.heldKeys) {
+        tuningTableRow.element._rawValue.classList.remove('active')
+      }
+      ;(window as any).TUNING_TABLE_ROWS[index] = tuningTableRow
+    }
+  }
   state.heldNotes.set(index, Math.max(0, (state.heldNotes.get(index) ?? 0) - 1))
 }
 
@@ -47,22 +188,8 @@ function tuningTableKeyOff(index: number) {
 
 const midiOut = computed(() => new MidiOut(midi.output as Output, midi.outputChannels))
 
-function sendNoteOn(index: number, frequency: number, rawAttack: number) {
-  frequency = clamp(-24000, 24000, frequency)
-  if (isNaN(frequency)) {
-    frequency = 0
-  }
-  let midiOff: NoteOff = () => {}
-  if (midi.outputMode === 'pitchBend') {
-    midiOff = midiOut.value.sendNoteOn(frequency, rawAttack)
-  } else if (midi.output !== null) {
-    midi.output.sendNoteOn(index, { channels: midi.outputChannel, rawAttack })
-    midiOff = (rawRelease?: number, time?: DOMHighResTimeStamp) => {
-      if (midi.output !== null) {
-        midi.output.sendNoteOff(index, { channels: midi.outputChannel, rawRelease, time })
-      }
-    }
-  }
+function sendNoteOn(frequency: number, rawAttack: number) {
+  const midiOff = midiOut.value.sendNoteOn(frequency, rawAttack)
 
   if (audio.synth === null || audio.virtualSynth === null) {
     return midiOff
@@ -83,56 +210,40 @@ function sendNoteOn(index: number, frequency: number, rawAttack: number) {
   return off
 }
 
-function midiNoteOn(index: number, rawAttack?: number, channel?: number) {
-  const multichannel = midi.multichannelToEquave
-
-  // in multichannel-to-equave mode calculate an offset based on the incoming channel
-  if (multichannel && channel !== undefined) {
-    let offset =
-      mmod(
-        channel - midi.multichannelCenter + midi.multichannelEquavesDown,
-        midi.multichannelNumEquaves
-      ) - midi.multichannelEquavesDown
-    offset = offset * scale.scale.size
-    index = index + offset
-  }
-
+function midiNoteOn(index: number, rawAttack?: number) {
   if (rawAttack === undefined) {
     rawAttack = 80
   }
-
+  let frequency = state.frequencies[index]
   if (!midi.velocityOn) {
     rawAttack = 80
   }
 
-  // since index can go out of range in multichannel-to-equave mode, use getFrequency()
-  let frequency = scale.getFrequency(index)
-
   // Store state to ensure consistent note off.
   const info = midiKeyInfo(index)
   const whiteMode = midi.whiteMode
-  const indices = scale.whiteIndices
+  const indices = state.whiteIndices
 
-  if (whiteMode === 'off' || multichannel) {
+  if (whiteMode === 'off') {
     tuningTableKeyOn(index)
   } else if (whiteMode === 'simple') {
     if (info.whiteNumber === undefined) {
       frequency = NaN
     } else {
-      info.whiteNumber += scale.whiteModeOffset
-      frequency = scale.getFrequency(info.whiteNumber)
+      info.whiteNumber += WHITE_MODE_OFFSET
+      frequency = state.getFrequency(info.whiteNumber)
       tuningTableKeyOn(info.whiteNumber)
     }
   } else if (whiteMode === 'blackAverage') {
     if (info.whiteNumber === undefined) {
-      info.flatOf += scale.whiteModeOffset
-      info.sharpOf += scale.whiteModeOffset
-      frequency = Math.sqrt(scale.getFrequency(info.flatOf) * scale.getFrequency(info.sharpOf))
+      info.flatOf += WHITE_MODE_OFFSET
+      info.sharpOf += WHITE_MODE_OFFSET
+      frequency = Math.sqrt(state.getFrequency(info.flatOf) * state.getFrequency(info.sharpOf))
       tuningTableKeyOn(info.flatOf)
       tuningTableKeyOn(info.sharpOf)
     } else {
-      info.whiteNumber += scale.whiteModeOffset
-      frequency = scale.getFrequency(info.whiteNumber)
+      info.whiteNumber += WHITE_MODE_OFFSET
+      frequency = state.getFrequency(info.whiteNumber)
       tuningTableKeyOn(info.whiteNumber)
     }
   } else if (whiteMode === 'keyColors') {
@@ -144,12 +255,12 @@ function midiNoteOn(index: number, rawAttack?: number, channel?: number) {
         if (index === indices[info.sharpOf + 1]) {
           frequency = NaN
         } else {
-          frequency = scale.getFrequency(index)
+          frequency = state.getFrequency(index)
           tuningTableKeyOn(index)
         }
       } else {
         index = indices[info.whiteNumber]
-        frequency = scale.getFrequency(index)
+        frequency = state.getFrequency(index)
         tuningTableKeyOn(index)
       }
     } else {
@@ -162,7 +273,7 @@ function midiNoteOn(index: number, rawAttack?: number, channel?: number) {
     return (rawRelease?: number) => {}
   }
 
-  const noteOff = sendNoteOn(index, frequency, rawAttack)
+  const noteOff = sendNoteOn(frequency, rawAttack)
   return (rawRelease?: number) => {
     if (rawRelease === undefined) {
       rawRelease = 80
@@ -170,9 +281,7 @@ function midiNoteOn(index: number, rawAttack?: number, channel?: number) {
     if (!midi.velocityOn) {
       rawRelease = 80
     }
-    if (whiteMode === 'off' || whiteMode === 'keyColors' || multichannel) {
-      tuningTableKeyOff(index)
-    } else if (whiteMode === 'simple') {
+    if (whiteMode === 'simple') {
       if (info.whiteNumber !== undefined) {
         tuningTableKeyOff(info.whiteNumber)
       }
@@ -183,6 +292,8 @@ function midiNoteOn(index: number, rawAttack?: number, channel?: number) {
       } else {
         tuningTableKeyOff(info.whiteNumber)
       }
+    } else {
+      tuningTableKeyOff(index)
     }
     noteOff(rawRelease)
   }
@@ -202,20 +313,15 @@ watch(
     if (newValue !== null) {
       midiIn.listen(newValue as Input)
 
-      // Pass everything else through and distribute among the channels
+      // Pass everything else through and distrubute among the channels
       ;(newValue as Input).addListener('midimessage', (event) => {
         if (!RESERVED_MESSAGES.includes(event.message.type) && midi.output !== null) {
           if (event.message.isChannelMessage) {
             if (midiInputChannels.has(event.message.channel)) {
               const status = event.message.statusByte & 0b11110000
-              const data = [...event.message.data]
-              if (midi.outputMode === 'pitchBend') {
-                for (const channel of midi.outputChannels) {
-                  data[0] = status | (channel - 1)
-                  midi.output.send(data)
-                }
-              } else {
-                data[0] = status | (midi.outputChannel - 1)
+              for (const channel of midi.outputChannels) {
+                const data = [...event.message.data]
+                data[0] = status | (channel - 1)
                 midi.output.send(data)
               }
             }
@@ -228,12 +334,24 @@ watch(
   }
 )
 
+// === Score Chords functions ===
+function pushSymbolToChord(index: number){
+  state.scoreChord.push(state.symbolTable[index])
+}
+
+function pullSymbolfromChord(index: number){
+  const item = state.scoreChord.indexOf(state.symbolTable[index])
+  state.scoreChord.splice(item, 1)
+}
+
 // === Virtual and typing keyboard ===
 function keyboardNoteOn(index: number) {
   tuningTableKeyOn(index)
-  const noteOff = sendNoteOn(index, scale.getFrequency(index), 80)
+  pushSymbolToChord(index)
+  const noteOff = sendNoteOn(state.getFrequency(index), 80)
   function keyOff() {
     tuningTableKeyOff(index)
+    pullSymbolfromChord(index)
     return noteOff(80)
   }
   return keyOff
@@ -242,7 +360,7 @@ function keyboardNoteOn(index: number) {
 // === Typing keyboard state ===
 function windowKeydownOrUp(event: KeyboardEvent | MouseEvent) {
   // Audio context must be initialized as a response to user gesture
-  setTimeout(() => audio.initialize(), 1)
+  audio.initialize()
 
   const target = event.target
   // Keep typing activated while adjusting sliders
@@ -269,28 +387,9 @@ function windowKeydown(event: KeyboardEvent) {
     return
   }
 
-  if (event.ctrlKey) {
-    // Allow copy & paste.
-    return
-  } else if (event.altKey || event.metaKey) {
-    // Allow keyboard navigation out of the app.
-    return
-  } else if (
-    [
-      state.deactivationCode,
-      state.equaveUpCode,
-      state.equaveDownCode,
-      state.degreeUpCode,
-      state.degreeDownCode
-    ].includes(event.code)
-  ) {
-    // Prevent overlapping action with configurable state.
-    event.preventDefault()
-  } else if (COORDS_BY_CODE.has(event.code) && COORDS_BY_CODE.get(event.code)![2] === 1) {
-    // Prevent action for keys that make sound.
-    event.preventDefault()
-  } else if (event.key === '/') {
-    // Disable browser specific features like quick find on Firefox.
+  // Disable browser specific features like quick find on Firefox,
+  // but allow normal copy & paste.
+  if (!event.ctrlKey && !event.altKey && !event.metaKey) {
     event.preventDefault()
   }
 
@@ -302,21 +401,21 @@ function windowKeydown(event: KeyboardEvent) {
 
   // "Octave" keys
   if (event.code === state.equaveUpCode) {
-    scale.equaveShift++
+    state.equaveShift++
     return
   }
   if (event.code === state.equaveDownCode) {
-    scale.equaveShift--
+    state.equaveShift--
     return
   }
 
   // "Transpose" keys
   if (event.code === state.degreeUpCode) {
-    scale.degreeShift++
+    state.degreeShift++
     return
   }
   if (event.code === state.degreeDownCode) {
-    scale.degreeShift--
+    state.degreeShift--
     return
   }
 
@@ -346,14 +445,13 @@ function typingKeydown(event: CoordinateKeyboardEvent) {
     return emptyKeyup
   }
 
-  let index = scale.scale.baseMidiNote + scale.scale.size * scale.equaveShift + scale.degreeShift
+  let index = state.baseMidiNote + state.scale.size * state.equaveShift
 
-  if (scale.keyboardMode === 'isomorphic') {
-    index += x * scale.isomorphicHorizontal + (2 - y) * scale.isomorphicVertical
+  if (state.keyboardMode === 'isomorphic') {
+    index += state.degreeShift + x * state.isomorphicHorizontal + (2 - y) * state.isomorphicVertical
   } else {
-    if (scale.qwertyMapping.has(event.code)) {
-      // QWERTY mapping incorporates shifts
-      index = scale.qwertyMapping.get(event.code)!
+    if (state.keyboardMapping.has(event.code)) {
+      index = state.keyboardMapping.get(event.code)!
     } else {
       // No user mapping for the key, bail out
       return emptyKeyup
@@ -364,7 +462,7 @@ function typingKeydown(event: CoordinateKeyboardEvent) {
 }
 
 // === Lifecycle ===
-onMounted(async () => {
+onMounted(() => {
   window.addEventListener('keyup', windowKeyup)
   window.addEventListener('keydown', windowKeydownOrUp)
   window.addEventListener('keyup', windowKeydownOrUp)
@@ -376,35 +474,30 @@ onMounted(async () => {
   const url = new URL(window.location.href)
   const query = url.searchParams
 
-  // This is overridden when scale data is evaluated, but some corner cases need to be covered.
-  setNumberOfComponents(DEFAULT_NUMBER_OF_COMPONENTS)
-
   // Special handling for the empty app state so that
   // the browser's back button can undo to the clean state.
   if (![...query.keys()].length) {
-    await router.push({ path: getPath(url), query: { version } })
-  } else if (!query.has('version')) {
-    // Scale Workshop 1 compatibility
+    router.push({ path: getPath(url), query: { version } })
+  }
+  // Scale Workshop 1 compatibility
+  else if (!query.has('version')) {
     try {
       const scaleWorkshopOneData = new ScaleWorkshopOneData()
-      audio.initialize()
 
-      scale.name = scaleWorkshopOneData.name
-      scale.userBaseFrequency = scaleWorkshopOneData.freq
-      scale.autoFrequency = false
-      scale.baseMidiNote = scaleWorkshopOneData.midi
-      scale.isomorphicHorizontal = scaleWorkshopOneData.horizontal
-      scale.isomorphicVertical = scaleWorkshopOneData.vertical
+      state.scaleName = scaleWorkshopOneData.name
+      state.scale.baseFrequency = scaleWorkshopOneData.freq
+      state.baseMidiNote = scaleWorkshopOneData.midi
+      state.isomorphicHorizontal = scaleWorkshopOneData.horizontal
+      state.isomorphicVertical = scaleWorkshopOneData.vertical
+      if (scaleWorkshopOneData.colors !== undefined) {
+        state.keyColors = scaleWorkshopOneData.colors.split(' ')
+      }
 
       if (scaleWorkshopOneData.data !== undefined) {
-        const colors = scaleWorkshopOneData.colors ?? ''
-        const intervals = scaleWorkshopOneData.parseTuningData()
-        // Convert to raw text
-        const sourceLines = intervals.map((i) => i.toString())
-        annotateColors(sourceLines, colors.split(' '))
-        scale.sourceText = sourceLines.join('\n')
-        scale.computeScale()
-        scale.history.truncate()
+        // Check that the scale is valid by attempting a parse
+        scaleWorkshopOneData.parseTuningData()
+        // Store raw text lines
+        state.scaleLines = scaleWorkshopOneData.data.split(NEWLINE_TEST)
       }
 
       audio.waveform = scaleWorkshopOneData.waveform || 'semisine'
@@ -412,79 +505,10 @@ onMounted(async () => {
       audio.decayTime = scaleWorkshopOneData.decayTime
       audio.sustainLevel = scaleWorkshopOneData.sustainLevel
       audio.releaseTime = scaleWorkshopOneData.releaseTime
-
-      // Replace query with version 3.
-      await router.push({ path: getPath(url), query: { version } })
     } catch (error) {
       console.error('Error parsing version 1 URL', error)
     }
-  } else if (query.get('version')!.startsWith('2.')) {
-    // Scale Workshop 2 compatibility
-    try {
-      const decodedState = decodeQuery(query)
-      audio.initialize()
-
-      let pianoMode: 'Asdf' | 'QweZxc' = 'Asdf'
-      if (decodedState.pianoMode === 'QweZxc0' || decodedState.pianoMode === 'QweZxc1') {
-        pianoMode = 'QweZxc'
-      }
-
-      scale.name = decodedState.scaleName
-      scale.userBaseFrequency = decodedState.baseFrequency
-      scale.autoFrequency = false
-      scale.baseMidiNote = decodedState.baseMidiNote
-      scale.isomorphicHorizontal = decodedState.isomorphicHorizontal
-      scale.isomorphicVertical = decodedState.isomorphicVertical
-      scale.keyboardMode = decodedState.keyboardMode
-      scale.pianoMode = pianoMode
-      scale.equaveShift = decodedState.equaveShift
-      scale.degreeShift = decodedState.degreeShift
-      audio.waveform = decodedState.waveform
-      audio.attackTime = decodedState.attackTime
-      audio.decayTime = decodedState.decayTime
-      audio.sustainLevel = decodedState.sustainLevel
-      audio.releaseTime = decodedState.releaseTime
-      audio.pingPongDelayTime = decodedState.pingPongDelayTime
-      audio.pingPongFeedback = decodedState.pingPongFeedback
-      audio.pingPongSeparation = decodedState.pingPongSeparation
-      audio.pingPongGain = decodedState.pingPongGain
-
-      // The decoder speaks Scale Workshop 2. Translate to SonicWeave.
-      const sourceLines: string[] = []
-      const invalidLines: [string, number][] = []
-      for (let i = 0; i < decodedState.scaleLines.length; ++i) {
-        const line = decodedState.scaleLines[i]
-        try {
-          const sourceLine = parseScaleWorkshop2Line(line, DEFAULT_NUMBER_OF_COMPONENTS).toString()
-          sourceLines.push(sourceLine)
-        } catch {
-          invalidLines.push([line, i])
-        }
-      }
-
-      annotateColors(sourceLines, decodedState.keyColors)
-      for (const [line, index] of invalidLines) {
-        if (!line.trim().length) {
-          sourceLines.splice(index, 0, '')
-        } else {
-          sourceLines.splice(
-            index,
-            0,
-            '(* ' + line.replaceAll('(*', '(\u2217').replaceAll('*)', '\u2217)') + ' *)'
-          )
-        }
-      }
-      scale.sourceText = sourceLines.join('\n')
-      scale.computeScale()
-      scale.history.truncate()
-
-      // Replace query with version 3.
-      await router.push({ path: getPath(url), query: { version } })
-    } catch (error) {
-      console.error(`Error parsing version ${query.get('version')} URL`, error)
-    }
   }
-  await entropy.fetchTable()
 })
 
 onUnmounted(() => {
@@ -507,7 +531,7 @@ function panic() {
   midiIn.deactivate()
   if (midi.output !== null) {
     midi.output.sendAllNotesOff({
-      channels: midi.outputMode === 'pitchBend' ? [...midi.outputChannels] : [midi.outputChannel]
+      channels: [...midi.outputChannels]
     })
   }
   if (audio.synth !== null) {
@@ -523,9 +547,6 @@ function panic() {
         <RouterLink to="/about"><strong>Sw</strong></RouterLink>
       </li>
       <li><RouterLink to="/">Build Scale</RouterLink></li>
-      <li v-if="state.showMosTab">
-        <RouterLink to="/mos">MOS</RouterLink>
-      </li>
       <li><RouterLink to="/analysis">Analysis</RouterLink></li>
       <li><RouterLink to="/lattice">Lattice</RouterLink></li>
       <li><RouterLink to="/vk">Virtual Keyboard</RouterLink></li>
@@ -557,15 +578,10 @@ function panic() {
     :typingKeyboard="typingKeyboard"
     @panic="panic"
   />
-  <footer id="app-footer">
-    <RouterLink to="/privacy-policy">Privacy policy</RouterLink>,
-    <RouterLink to="/terms-of-service">Terms of service</RouterLink>
-  </footer>
 </template>
 
 <style>
 @import '@/assets/base.css';
-@import '@/assets/main.css';
 
 #app {
   display: flex;
@@ -579,7 +595,6 @@ nav#app-navigation {
   display: flex;
 }
 
-#app > #view,
 #app > main {
   flex: 1 1 auto;
   overflow-y: hidden;
@@ -609,13 +624,11 @@ nav#app-navigation ul li a {
   cursor: default;
 }
 
-nav#app-navigation ul#app-tabs li a:focus,
 nav#app-navigation ul#app-tabs li a:hover {
   background-color: var(--color-accent-deeper);
 }
 
 nav#app-navigation ul#app-tabs li a.router-link-exact-active,
-nav#app-navigation ul#app-tabs li a.router-link-exact-active:focus,
 nav#app-navigation ul#app-tabs li a.router-link-exact-active:hover {
   background-color: var(--color-background);
   color: var(--color-text);
@@ -625,7 +638,6 @@ nav a.router-link-exact-active {
   color: var(--color-text);
 }
 
-nav a.router-link-exact-active:focus,
 nav a.router-link-exact-active:hover {
   background-color: transparent;
 }
@@ -659,16 +671,5 @@ nav a:first-of-type {
 
 #app-tray ul li .active {
   color: var(--color-accent-text);
-}
-
-#app-footer {
-  font-size: small;
-  line-height: 1;
-  padding-right: 1em;
-  text-align: right;
-  color: var(--color-text-mute);
-}
-#app-footer a {
-  color: var(--color-text-mute);
 }
 </style>

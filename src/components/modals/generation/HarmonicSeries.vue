@@ -1,35 +1,33 @@
 <script setup lang="ts">
+import { DEFAULT_NUMBER_OF_COMPONENTS } from '@/constants'
 import Modal from '@/components/ModalDialog.vue'
 import { clamp } from 'xen-dev-utils'
+import { Scale } from 'scale-workshop-core'
 import { useModalStore } from '@/stores/modal'
-import { expandCode } from '@/utils'
 
-defineProps<{
-  show: boolean
-}>()
-
-const emit = defineEmits(['update:source', 'update:scaleName', 'cancel'])
+const emit = defineEmits(['update:scale', 'update:scaleName', 'cancel'])
 
 const modal = useModalStore()
 
-function generate(expand = true) {
+function generate() {
   const denominator = Math.max(1, Math.round(modal.lowInteger))
   const greatestNumerator = clamp(
     denominator + 1,
     denominator + 1000,
     Math.round(modal.highInteger)
   )
-  let source = `${denominator}::${greatestNumerator}`
-  if (expand) {
-    source = expandCode(source)
-  }
+  const scale = Scale.fromHarmonicSeries(
+    denominator,
+    greatestNumerator,
+    DEFAULT_NUMBER_OF_COMPONENTS
+  )
   emit('update:scaleName', `Harmonics ${denominator}-${greatestNumerator}`)
-  emit('update:source', source)
+  emit('update:scale', scale)
 }
 </script>
 
 <template>
-  <Modal :show="show" @confirm="generate" @cancel="$emit('cancel')">
+  <Modal @confirm="generate" @cancel="$emit('cancel')">
     <template #header>
       <h2>Generate harmonic series segment</h2>
     </template>
@@ -55,13 +53,6 @@ function generate(expand = true) {
             v-model="modal.highInteger"
           />
         </div>
-      </div>
-    </template>
-    <template #footer>
-      <div class="btn-group">
-        <button @click="() => generate(true)">OK</button>
-        <button @click="$emit('cancel')">Cancel</button>
-        <button @click="() => generate(false)">Raw</button>
       </div>
     </template>
   </Modal>

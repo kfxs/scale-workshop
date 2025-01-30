@@ -1,127 +1,41 @@
 <script setup lang="ts">
-import { CS_EDO, LEFT_MOUSE_BTN } from '@/constants'
-import { generatorRanges } from 'moment-of-symmetry'
+import { LEFT_MOUSE_BTN } from '@/constants'
+import type { Scale } from 'scale-workshop-core'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { mmod } from 'xen-dev-utils'
-import type { Scale } from '@/scale'
-import { valueToCents } from 'xen-dev-utils'
 
-const TAU = 2 * Math.PI
 const CIRCLE_RADIUS = 40
-const MOS_RANGE_RADIUS = 41
 const SCALE_TICK_HEIGHT = 4
 const GENERATOR_TICK_HEIGHT = 5
 
 const props = defineProps<{
   scale: Scale | null
-  labels: string[] | null
   generatorCents: number | null
   periodCents: number | null
   size: number
   up: number
-  numPeriods: number
 }>()
 
 const emit = defineEmits(['update:generatorCents'])
-
-const ranges = computed(() =>
-  generatorRanges(props.size).map((r) => ({
-    ...r,
-    lowerBound: r.lowerBound.valueOf(),
-    upperBound: r.upperBound.valueOf()
-  }))
-)
-
-const paths = computed(() => {
-  let bright = ''
-  let dark = ''
-  for (const range of ranges.value) {
-    const theta1 = TAU * range.lowerBound
-    const theta2 = TAU * range.upperBound
-    const x1 = 50 + MOS_RANGE_RADIUS * Math.sin(theta1)
-    const y1 = 50 - MOS_RANGE_RADIUS * Math.cos(theta1)
-    const x2 = 50 + MOS_RANGE_RADIUS * Math.sin(theta2)
-    const y2 = 50 - MOS_RANGE_RADIUS * Math.cos(theta2)
-    const largeArcFlag = theta2 - theta1 > Math.PI ? 1 : 0
-    const arc = `M ${x1} ${y1} A ${MOS_RANGE_RADIUS} ${MOS_RANGE_RADIUS} 0 ${largeArcFlag} 1 ${x2} ${y2}`
-    if (range.bright) {
-      bright += arc
-    } else {
-      dark += arc
-    }
-  }
-
-  return { bright, dark }
-})
 
 const periodCents = computed(() => {
   if (props.periodCents !== null) {
     return props.periodCents
   }
   if (props.scale !== null) {
-    return valueToCents(Math.abs(props.scale.equaveRatio))
+    return props.scale.equave.totalCents()
   }
   return 1200
-})
-
-const generatorTickRatios = computed(() => {
-  if (props.generatorCents === null) {
-    return []
-  }
-  const periodScale = 1 / periodCents.value
-  return [...Array(props.size).keys()].map(
-    (i) => (i + props.up + 1 - props.size) * props.generatorCents! * periodScale
-  )
-})
-
-const mosLabel = computed(() => {
-  if (props.generatorCents === null) {
-    return ''
-  }
-  const g = mmod(props.generatorCents / periodCents.value, 1)
-  for (const range of ranges.value) {
-    if (g >= range.lowerBound && g <= range.upperBound) {
-      return `${range.numberOfLargeSteps * props.numPeriods}L ${range.numberOfSmallSteps * props.numPeriods}s`
-    }
-  }
-  // Compute pattern for step variety = 3
-  let rs = generatorTickRatios.value
-  if (!rs.length) {
-    return ''
-  }
-  rs = rs.map((r) => mmod(r, 1))
-  rs.push(1)
-  rs.sort((a, b) => a - b)
-  let diffs = []
-  for (let i = 1; i < rs.length; ++i) {
-    diffs.push(rs[i] - rs[i - 1])
-  }
-  diffs = diffs.map((r) => Math.round(r * CS_EDO))
-  const uniques = Array.from(new Set(diffs)).sort((a, b) => a - b)
-
-  if (uniques.length === 3) {
-    const [s, M, L] = uniques
-    let countS = 0
-    let countM = 0
-    let countL = 0
-    for (const step of diffs) {
-      if (step === s) countS++
-      else if (step === M) countM++
-      else if (step === L) countL++
-    }
-    const n = props.numPeriods
-    return `${n * countL}L ${n * countM}M ${n * countS}s`
-  }
-  // There are degenerate edge-cases with step variety = 2. Show nothing to avoid implying MOS.
-  return ''
 })
 
 const scaleTickDirections = computed(() => {
   if (props.scale === null) {
     return []
   }
-  const result = props.scale.intervalRatios.map((r) => valueToCents(Math.abs(r)))
-  const angleScale = TAU / periodCents.value
+  const result = []
+  for (let i = 1; i < props.scale.size + 1; ++i) {
+    result.push(props.scale.getMonzo(i).totalCents())
+  }
+  const angleScale = (2 * Math.PI) / periodCents.value
   return result
     .map((cents) => cents * angleScale)
     .map((theta) => [Math.sin(theta), Math.cos(theta)])
@@ -144,9 +58,9 @@ const scaleTickCoords = computed(() => {
 
 const scaleLabels = computed(() => {
   const result = []
-  let i = 0
+  let i = 1
   for (const [sin, cos] of scaleTickDirections.value) {
-    const name = props.labels ? props.labels[i++] : '·'
+    const name = props.scale!.getName(i++)
     const radius = CIRCLE_RADIUS - 2 * SCALE_TICK_HEIGHT
     result.push({
       x: `${50 + radius * sin}`,
@@ -158,8 +72,15 @@ const scaleLabels = computed(() => {
 })
 
 const generatorTickDirections = computed(() => {
-  return generatorTickRatios.value
-    .map((r) => r * TAU)
+  if (props.generatorCents === null) {
+    return []
+  }
+  const result = [...Array(props.size).keys()].map(
+    (i) => (i + props.up + 1 - props.size) * props.generatorCents!
+  )
+  const angleScale = (2 * Math.PI) / periodCents.value
+  return result
+    .map((cents) => cents * angleScale)
     .map((theta) => [Math.sin(theta), Math.cos(theta)])
 })
 
@@ -236,7 +157,7 @@ function onMouseMove(event: MouseEvent) {
   const x = event.offsetX - container.value!.clientWidth * 0.5
   const y = event.offsetY - container.value!.clientHeight * 0.5
 
-  const clockwise = 1 - (Math.PI + Math.atan2(x, y)) / TAU
+  const clockwise = 1 - (Math.PI + Math.atan2(x, y)) / (2 * Math.PI)
   emit('update:generatorCents', clockwise * periodCents.value)
 }
 
@@ -250,7 +171,7 @@ function onWindowMouseUp(event: MouseEvent) {
 // Notes on touch handling:
 // * Touch start must not preventDefault to allow scrolling with two fingers.
 // * Touch move must preventDefault to prevent scrolling with one finger.
-// * The behavior is a bit sporadic when two-finger scrolling is released and only one finger remains on the svg element.
+// * The behaviour is a bit sporadic when two-finger scrolling is released and only one finger remains on the svg element.
 
 function handleTouch(touch: Touch) {
   const svg = container.value!
@@ -258,7 +179,7 @@ function handleTouch(touch: Touch) {
   const x = touch.pageX - bounds.left - svg.clientWidth * 0.5
   const y = touch.pageY - bounds.top - svg.clientHeight * 0.5
 
-  const clockwise = 1 - (Math.PI + Math.atan2(x, y)) / TAU
+  const clockwise = 1 - (Math.PI + Math.atan2(x, y)) / (2 * Math.PI)
   emit('update:generatorCents', clockwise * periodCents.value)
 }
 
@@ -295,13 +216,6 @@ onUnmounted(() => {
     @touchmove="onTouchMove"
     ref="container"
   >
-    <path :d="paths.dark" stroke-width="0.5%" class="dark" fill="none" />
-    <path :d="paths.bright" stroke-width="0.5%" class="bright" fill="none" />
-
-    <text x="50%" y="50%" font-size="4" text-anchor="middle" dominant-baseline="middle">
-      {{ mosLabel }}
-    </text>
-
     <line
       v-for="(attrs, index) of generatorTrajectory"
       :key="index"
@@ -376,12 +290,5 @@ svg text {
 
 svg text.generator {
   fill: var(--color-accent-text-btn);
-}
-
-path.bright {
-  stroke: var(--color-bright-indicator);
-}
-path.dark {
-  stroke: var(--color-dark-indicator);
 }
 </style>

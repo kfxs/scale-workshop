@@ -1,27 +1,22 @@
 <script setup lang="ts">
 import Modal from '@/components/ModalDialog.vue'
-import { expandCode } from '@/utils'
+import { parseChordInput } from '@/utils'
+import { Scale } from 'scale-workshop-core'
 import { useModalStore } from '@/stores/modal'
 
-defineProps<{
-  show: boolean
-}>()
-
-const emit = defineEmits(['update:source', 'update:scaleName', 'cancel'])
+const emit = defineEmits(['update:scale', 'update:scaleName', 'cancel'])
 
 const modal = useModalStore()
 
-function generate(expand = true) {
+function generate() {
   try {
-    let source = modal.chordIntervals.map((i) => i.toString()).join(':')
+    const intervals = parseChordInput(modal.chord)
+    const scale = Scale.fromChord(intervals)
     emit('update:scaleName', `Chord ${modal.chord}`)
-    if (modal.retrovertChord) {
-      source = `retrovert(${source})`
-    }
-    if (expand) {
-      emit('update:source', expandCode(source))
+    if (modal.invertChord) {
+      emit('update:scale', scale.invert())
     } else {
-      emit('update:source', source)
+      emit('update:scale', scale)
     }
   } catch (error) {
     if (error instanceof Error) {
@@ -34,7 +29,7 @@ function generate(expand = true) {
 </script>
 
 <template>
-  <Modal :show="show" @confirm="generate" @cancel="$emit('cancel')">
+  <Modal @confirm="generate" @cancel="$emit('cancel')">
     <template #header>
       <h2>Enumerate chord</h2>
     </template>
@@ -51,16 +46,9 @@ function generate(expand = true) {
           />
         </div>
         <div class="control checkbox-container">
-          <input type="checkbox" id="integrate-period" v-model="modal.retrovertChord" />
-          <label for="integrate-period">Retrovert chord (negative harmony)</label>
+          <input type="checkbox" id="integrate-period" v-model="modal.invertChord" />
+          <label for="integrate-period">Invert chord</label>
         </div>
-      </div>
-    </template>
-    <template #footer>
-      <div class="btn-group">
-        <button @click="() => generate(true)">OK</button>
-        <button @click="$emit('cancel')">Cancel</button>
-        <button @click="() => generate(false)">Raw</button>
       </div>
     </template>
   </Modal>

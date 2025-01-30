@@ -83,7 +83,7 @@ function draw(time: DOMHighResTimeStamp) {
   }
 
   // Render a chord wheel that appears to move based on how
-  // discordant the voices are compared to a pure enumerated chord.
+  // disconcordant the voices are compared to a pure enumerated chord.
   const offsetWidth = canvas.value!.offsetWidth
   ctx.lineWidth = (props.lineWidth * props.width) / offsetWidth
   ctx.strokeStyle = props.strokeStyle
@@ -157,7 +157,7 @@ function draw(time: DOMHighResTimeStamp) {
   if (props.type === 'otonal') {
     text = chord.join(':')
   } else {
-    text = '/' + chord.join(':')
+    text = '1/(' + chord.join(':') + ')'
   }
   const textWidth = ctx.measureText(text).width
   if (textWidth * 10 < width * 8) {

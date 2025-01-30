@@ -1,14 +1,50 @@
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import { UNIX_NEWLINE } from '@/constants'
-import { syncValues } from '@/utils'
+import {
+  Interval,
+  Scale,
+  parseLine,
+  type IntervalOptions,
+  reverseParseScale
+} from 'scale-workshop-core'
+import { DEFAULT_NUMBER_OF_COMPONENTS, NUMBER_OF_NOTES, UNIX_NEWLINE } from '@/constants'
+import { computeWhiteIndices } from '@/midi'
+import { mapWhiteAsdfBlackQwerty, mapWhiteQweZxcBlack123Asd } from '@/keyboard-mapping'
+import { arraysEqual } from 'xen-dev-utils'
+import type { AccidentalStyle } from '@/utils'
 
 export const useStateStore = defineStore('state', () => {
-  // Mapping from MIDI index to number of interfaces currently pressing the key down
+  // Nonpersistent state of the application
+  const scaleName = ref('')
+  const scaleLines = ref<string[]>([])
+  const scaleSymbols = ref<string[]>([])
+  const scoreChord = ref<string[]>([])
+  const scale = reactive(Scale.fromIntervalArray([parseLine('1/1', DEFAULT_NUMBER_OF_COMPONENTS)]))
+  const baseMidiNote = ref(69)
+  const keyColors = ref([
+    'white',
+    'black',
+    'white',
+    'white',
+    'black',
+    'white',
+    'black',
+    'white',
+    'white',
+    'black',
+    'white',
+    'black'
+  ])
+  const isomorphicVertical = ref(5)
+  const isomorphicHorizontal = ref(1)
+  // Keyboard mode affects both physical qwerty and virtual keyboards
+  const keyboardMode = ref<'isomorphic' | 'piano'>('isomorphic')
+  // Physical layout mimics a piano layout in one or two layers
+  const pianoMode = ref<'Asdf' | 'QweZxc0' | 'QweZxc1'>('Asdf')
+  const equaveShift = ref(0)
+  const degreeShift = ref(0)
   const heldNotes = reactive(new Map<number, number>())
   const typingActive = ref(true)
-
-  const latticeType = ref<'ji' | 'et' | 'cycles' | '3d' | 'auto'>('auto')
 
   // These user preferences are fetched from local storage.
   const storage = window.localStorage
@@ -19,23 +55,14 @@ export const useStateStore = defineStore('state', () => {
   const colorScheme = ref<'light' | 'dark'>(
     (storedScheme ?? mediaScheme) === 'dark' ? 'dark' : 'light'
   )
+  const centsFractionDigits = ref(parseInt(storage.getItem('centsFractionDigits') ?? '3', 10))
+  const decimalFractionDigits = ref(parseInt(storage.getItem('decimalFractionDigits') ?? '5', 10))
   const showVirtualQwerty = ref(storage.getItem('showVirtualQwerty') === 'true')
-  const showMosTab = ref(storage.getItem('showMosTab') === 'true')
-  const showKeyboardLabel = ref(storage.getItem('showKeyboardLabel') !== 'false')
-  const showKeyboardCents = ref(storage.getItem('showKeyboardCents') !== 'false')
-  const showKeyboardRatio = ref(storage.getItem('showKeyboardRatio') !== 'false')
-  const showKeyboardFrequency = ref(storage.getItem('showKeyboardFrequency') !== 'false')
-
-  // Analysis preferences
+  const showMusicalScore = ref(storage.getItem('showMusicalScore') === 'true')
+  const midiOctaveOffset = ref(parseInt(storage.getItem('midiOctaveOffset') ?? '-1', 10))
   const intervalMatrixIndexing = ref(parseInt(storage.getItem('intervalMatrixIndexing') ?? '0', 10))
-  const maxMatrixWidth = ref(parseInt(storage.getItem('maxMatrixWidth') ?? '100', 10))
-  const calculateConstantStructureViolations = ref(
-    storage.getItem('calculateConstantStructureViolations') === 'true'
-  )
-  const calculateVariety = ref(storage.getItem('calculateVariety') === 'true')
-  const calculateBrightness = ref(storage.getItem('calculateBrightness') === 'true')
-  const constantStructureMargin = ref(
-    parseInt(storage.getItem('constantStructureMargin') ?? '0', 10)
+  const accidentalPreference = ref<AccidentalStyle>(
+    (localStorage.getItem('accidentalPreference') as AccidentalStyle) ?? 'double'
   )
 
   // Special keyboard codes also from local storage.
@@ -45,93 +72,223 @@ export const useStateStore = defineStore('state', () => {
   const degreeUpCode = ref(storage.getItem('degreeUpCode') ?? 'NumpadAdd')
   const degreeDownCode = ref(storage.getItem('degreeDownCode') ?? 'NumpadSubtract')
 
-  // Opt-in for user statistics
-  const shareStatistics = ref(storage.getItem('shareStatistics') === 'true')
+  // === Computed state ===
+  const frequencies = computed(() =>
+    scale.getFrequencyRange(-baseMidiNote.value, NUMBER_OF_NOTES - baseMidiNote.value)
+  )
 
-  // The app doesn't fully work on Safari. Inform the user.
-  const showSafariWarning = ref(storage.getItem('showSafariWarning') !== 'false')
+  const baseIndex = computed(
+    () => baseMidiNote.value + equaveShift.value * scale.size + degreeShift.value
+  )
 
-  // Debugging features.
-  const debug = ref(storage.getItem('debug') === 'true')
+  // For Score symbols
+  const symbolTable = computed(()=>{
+    const table: string[] = []
+    for(let i=0; i < frequencies.value.length; i++){
+      const index = i - baseMidiNote.value
+      let symbIndex = index % scaleSymbols.value.length
+      let ottava = 5
+      if(index < 0){
+        let negativeIndex = scaleSymbols.value.length + index;
+        ottava -= 1
+        while(negativeIndex < 0){
+          negativeIndex += scaleSymbols.value.length 
+          ottava -= 1
+        }
+        symbIndex = (negativeIndex) % scaleSymbols.value.length
+      }
+      table[i] =  scaleSymbols.value[symbIndex] + (scaleSymbols.value[symbIndex] ? ottavaCheck(scaleSymbols.value[symbIndex], scaleSymbols.value.length, ottava, index) : '')
+    }
+    return table
+  })
 
-  /**
-   * Convert live state to a format suitable for storing on the server.
-   */
-  function toJSON() {
-    return { latticeType: latticeType.value }
+  function ottavaCheck(symbol: string, length: number, ottava: number, index: number){
+    if(ottava >= 5){
+      const ottavaIncrease = Math.floor(index/length)
+      ottava += ottavaIncrease
+    }
+    if(symbol.toUpperCase().startsWith('A') || symbol.toUpperCase().startsWith('B')){
+      //We are asuming that A natural (ottava 4) is the first note on the scale, so octave changes will not be applied to A flat or A half-flat
+      if(!symbol.toUpperCase().startsWith('AB') && !symbol.toUpperCase().startsWith('AD')){
+        ottava -= 1
+      }
+    }
+    return ottava
+  }
+  
+
+  // For midi mapping
+  const whiteIndices = computed(() => computeWhiteIndices(baseMidiNote.value, keyColors.value))
+
+  const keyboardMapping = computed<Map<string, number>>(() => {
+    const size = scale.size
+    const baseIndex = baseMidiNote.value + equaveShift.value * size + degreeShift.value
+    if (pianoMode.value === 'Asdf') {
+      return mapWhiteAsdfBlackQwerty(keyColors.value, baseMidiNote.value, baseIndex)
+    } else if (pianoMode.value === 'QweZxc0') {
+      return mapWhiteQweZxcBlack123Asd(keyColors.value, size, baseMidiNote.value, baseIndex, 0)
+    } else {
+      return mapWhiteQweZxcBlack123Asd(keyColors.value, size, baseMidiNote.value, baseIndex, 1)
+    }
+  })
+
+  // === State updates ===
+  function updateFromScaleLines(lines: string[]) {
+    if (arraysEqual(lines, scaleLines.value)) {
+      return
+    }
+    scaleLines.value = lines
+    const intervals: Interval[] = []
+    const options: IntervalOptions = {
+      centsFractionDigits: centsFractionDigits.value,
+      decimalFractionDigits: decimalFractionDigits.value
+    }
+    lines.forEach((line) => {
+      try {
+        const interval = parseLine(line, DEFAULT_NUMBER_OF_COMPONENTS, options)
+        intervals.push(interval)
+      } catch {
+        /* empty */
+      }
+    })
+    if (!intervals.length) {
+      intervals.push(parseLine('1/1', DEFAULT_NUMBER_OF_COMPONENTS, options))
+    }
+
+    const surrogate = Scale.fromIntervalArray(intervals)
+    scale.intervals = surrogate.intervals
+    scale.equave = surrogate.equave
   }
 
-  /**
-   * Apply revived state to current state.
-   * @param data JSON data as an Object instance.
-   */
-  function fromJSON(data: any) {
-    latticeType.value = data.latticeType
+  function updateFromScale(surrogate: Scale) {
+    scale.intervals = surrogate.intervals
+    scale.equave = surrogate.equave
+    scaleLines.value = reverseParseScale(scale)
   }
+
+  function updateSymbols(symbols: string[]) {
+    scaleSymbols.value = symbols
+  }
+
+  // Computed wrappers to avoid triggering a watcher loop.
+  const scaleWrapper = computed({
+    get() {
+      return scale
+    },
+    set: updateFromScale
+  })
+
+  const scaleLinesWrapper = computed({
+    get() {
+      return scaleLines.value
+    },
+    set: updateFromScaleLines
+  })
+
+  const scaleSymbolsWrapper = computed({
+    get() {
+      return scaleSymbols.value
+    },
+    set: updateSymbols
+  })
 
   // Local storage watchers
-  syncValues({
-    newline,
-    showVirtualQwerty,
-    showMosTab,
-    showKeyboardLabel,
-    showKeyboardCents,
-    showKeyboardRatio,
-    showKeyboardFrequency,
-    intervalMatrixIndexing,
-    maxMatrixWidth,
-    calculateConstantStructureViolations,
-    calculateVariety,
-    calculateBrightness,
-    constantStructureMargin,
-    deactivationCode,
-    equaveUpCode,
-    equaveDownCode,
-    degreeUpCode,
-    degreeDownCode,
-    shareStatistics,
-    showSafariWarning,
-    debug
-  })
+  watch(newline, (newValue) => window.localStorage.setItem('newline', newValue))
   watch(
     colorScheme,
     (newValue) => {
-      storage.setItem('colorScheme', newValue)
+      window.localStorage.setItem('colorScheme', newValue)
       document.documentElement.setAttribute('data-theme', newValue)
     },
     { immediate: true }
   )
+  watch(centsFractionDigits, (newValue) =>
+    window.localStorage.setItem('centsFractionDigits', newValue.toString())
+  )
+  watch(decimalFractionDigits, (newValue) =>
+    window.localStorage.setItem('decimalFractionDigits', newValue.toString())
+  )
+  watch(showVirtualQwerty, (newValue) =>
+    window.localStorage.setItem('showVirtualQwerty', newValue.toString())
+  )
+  watch(showMusicalScore, (newValue) =>
+    window.localStorage.setItem('showMusicalScore', newValue.toString())
+  )
+  watch(midiOctaveOffset, (newValue) =>
+    window.localStorage.setItem('midiOctaveOffset', newValue.toString())
+  )
+  watch(intervalMatrixIndexing, (newValue) =>
+    window.localStorage.setItem('intervalMatrixIndexing', newValue.toString())
+  )
+  watch(accidentalPreference, (newValue) => localStorage.setItem('accidentalPreference', newValue))
+  // Store keymaps
+  watch(deactivationCode, (newValue) => window.localStorage.setItem('deactivationCode', newValue))
+  watch(equaveUpCode, (newValue) => window.localStorage.setItem('equaveUpCode', newValue))
+  watch(equaveDownCode, (newValue) => window.localStorage.setItem('equaveDownCode', newValue))
+  watch(degreeUpCode, (newValue) => window.localStorage.setItem('degreeUpCode', newValue))
+  watch(degreeDownCode, (newValue) => window.localStorage.setItem('degreeDownCode', newValue))
+
+  // Sanity watchers
+  watch(baseMidiNote, (newValue) => {
+    if (isNaN(newValue)) {
+      baseMidiNote.value = 69
+    } else if (Math.round(newValue) != newValue) {
+      baseMidiNote.value = Math.round(newValue)
+    }
+  })
+
+  // Methods
+  function getFrequency(index: number) {
+    if (index >= 0 && index < frequencies.value.length) {
+      return frequencies.value[index]
+    } else {
+      // Support more than 128 notes with some additional computational cost
+      return scale.getFrequency(index - baseMidiNote.value)
+    }
+  }
 
   return {
     // Live state
+    scaleName,
+    scaleSymbolsRaw: scaleSymbols,
+    scaleSymbols: scaleSymbolsWrapper,
+    scaleLinesRaw: scaleLines,
+    scaleLines: scaleLinesWrapper,
+    scaleRaw: scale,
+    scale: scaleWrapper,
+    scoreChord: scoreChord,
+    baseMidiNote,
+    keyColors,
+    isomorphicVertical,
+    isomorphicHorizontal,
+    keyboardMode,
+    pianoMode,
+    equaveShift,
+    degreeShift,
     heldNotes,
     typingActive,
-    latticeType,
     // Persistent state
     newline,
     colorScheme,
+    centsFractionDigits,
+    decimalFractionDigits,
     showVirtualQwerty,
-    showMosTab,
-    showKeyboardLabel,
-    showKeyboardCents,
-    showKeyboardRatio,
-    showKeyboardFrequency,
+    showMusicalScore,
+    midiOctaveOffset,
     intervalMatrixIndexing,
-    maxMatrixWidth,
-    calculateConstantStructureViolations,
-    calculateVariety,
-    calculateBrightness,
-    constantStructureMargin,
     deactivationCode,
     equaveUpCode,
     equaveDownCode,
     degreeUpCode,
     degreeDownCode,
-    shareStatistics,
-    showSafariWarning,
-    debug,
+    accidentalPreference,
+    // Computed state
+    frequencies,
+    baseIndex,
+    whiteIndices,
+    keyboardMapping,
+    symbolTable,
     // Methods
-    toJSON,
-    fromJSON
+    getFrequency,
   }
 })

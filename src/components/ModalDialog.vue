@@ -6,9 +6,9 @@ const props = defineProps({
     default: true,
     type: Boolean
   },
-  right: {
-    default: false,
-    type: Boolean
+  extraStyle: {
+    default: '',
+    type: String
   }
 })
 
@@ -67,16 +67,15 @@ watch(
         }
       })
     }
-  },
-  { immediate: true } // Needed to make async components work.
+  }
 )
 </script>
 
 <template>
   <Transition name="modal">
-    <div v-if="show" :class="{ 'modal-mask': true, right }" @mousedown.self="$emit('cancel')">
+    <div v-if="show" class="modal-mask" @mousedown.self="$emit('cancel')">
       <div class="modal-wrapper">
-        <div class="modal-container">
+        <div class="modal-container" :style="extraStyle">
           <div class="modal-header">
             <slot name="header">default header</slot>
           </div>
@@ -113,12 +112,6 @@ watch(
   background-color: var(--color-accent-dimmed);
   transition: opacity 0.3s ease;
 }
-/* Content layout (medium) */
-@media screen and (min-width: 600px) {
-  .modal-mask.right {
-    justify-content: right;
-  }
-}
 .modal-wrapper {
   vertical-align: middle;
 }
@@ -127,8 +120,8 @@ watch(
   background-color: var(--color-background);
   box-shadow: var(--color-drop-shadow) 0px 0px 200px;
   max-height: 100vh;
-  max-width: 22rem;
-  min-width: 20rem;
+  max-width: 100vw;
+  width: 20rem;
   transition: all 0.3s ease;
   display: flex;
   flex-flow: column;
@@ -138,7 +131,6 @@ watch(
 }
 .modal-body {
   overflow-y: auto;
-  padding-right: 0.5rem;
 }
 .modal-footer {
   border-top: 1px solid var(--color-border);

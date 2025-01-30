@@ -1,12 +1,10 @@
 import type { ImportResult } from '@/importers/base'
 import { AnaMarkImporter } from '@/importers/anamark'
 import { ScalaImporter } from '@/importers/scala'
-import { SonicWeaveInterchangeImporter } from '@/importers/xen-devs'
 
 const IMPORTERS = {
   scalascl: ScalaImporter,
-  anamark: AnaMarkImporter,
-  xendevs: SonicWeaveInterchangeImporter
+  anamark: AnaMarkImporter
 }
 
 export type ImporterKey = keyof typeof IMPORTERS

@@ -1,100 +1,7 @@
 # Change log
 
-## 3.2.0 (unreleased)
-  * Feature: Display hardness and chroma alongside the MOS pattern in Rank 2 modal [#379](https://github.com/xenharmonic-devs/scale-workshop/issues/379)
-  * Feature: Accept fractional values for CS variety margin [#821](https://github.com/xenharmonic-devs/scale-workshop/issues/821)
-  * Feature: Add a button for calculating more MOS sizes in Rank 2 modal [#832](https://github.com/xenharmonic-devs/scale-workshop/issues/832)
-  * Feature: Linear MIDI output mode (uses the numbers in the "#" column and assumes you tune the target device yourself) [#834](https://github.com/xenharmonic-devs/scale-workshop/issues/834)
-  * Feature: Display a warning when the user tries to create a scale larger than 1024 notes in *New scale -> Equal temperament* [#402](https://github.com/xenharmonic-devs/scale-workshop/issues/402)
-  * Feature: Add several L-system inharmonic timbres related to golden ratio, silver ratio, plastic number and supergolden ratio [#845](https://github.com/xenharmonic-devs/scale-workshop/issues/845)
-  * Bug fix: Fix a crash in Rank 2 caused by temperaments with a negative number of periods per equave [#837](https://github.com/xenharmonic-devs/scale-workshop/issues/837)
-  * Bug fix: Use maximum real precision when more than 12 fraction digits are used for cents [#843](https://github.com/xenharmonic-devs/scale-workshop/issues/843)
-
-## 3.1.0
-  * Feature: Implement the missing size inequality operator `~<>` (i.e. the negation of `~=`)
-  * Feature: Accept lone vals for `commaBasis` and `mappingBasis`
-  * Feature: Admit containers as spread arguments
-  * Bug fix: Sanitize divisions input in equalize modal [#825](https://github.com/xenharmonic-devs/scale-workshop/issues/825)
-  * Bug fix: Fix domain error in `realizeWord` [#823](https://github.com/xenharmonic-devs/scale-workshop/issues/823)
-  * Bug fix: Fix typos in error messages
-
-## 3.0.2
- * Bug fix: Admit cents as the equave when generating equal temperaments [#803](https://github.com/xenharmonic-devs/scale-workshop/issues/803)
- * Maintenance: Update npm package dependencies
-
-## 3.0.1
- * Feature: Apply CS margin to variety signature on Analysis tab [#796](https://github.com/xenharmonic-devs/scale-workshop/issues/796)
- * Feature: Approximate Tenney-tall fractions on Analysis tab [#796](https://github.com/xenharmonic-devs/scale-workshop/issues/796)
- * Regression: Show pitch associated with MIDI base index [#795](https://github.com/xenharmonic-devs/scale-workshop/issues/795)
- * Bug fix: Use relative mossteps when J4 doesn't coincide with 1/1 [#794](https://github.com/xenharmonic-devs/scale-workshop/issues/794)
-
-## 3.0.0
- * Feature: Core language switched to from [scale-workshop-core](https://github.com/xenharmonic-devs/scale-workshop-core) to [sonic-weave](https://github.com/xenharmonic-devs/sonic-weave)
- * Feature: Custom interval labels e.g. `3/2 "my fifth"`
- * Feature: CSS and RGB colors directly associated with intervals e.g. `400. yellow`
- * Feature: Relative FJS notation e.g. `M3^5` for `5/4`
- * Feature: Absolute FJS notation e.g. `G4` for `3/2` above middle C
- * Feature: Absolute frequencies e.g. `432 Hz`
- * Feature: Subgroup monzos e.g. `[-2 -1 1>@2.3.23` for `23/12`
- * Feature: Frequency as a subgroup basis element e.g. `[1 8>@Hz.2` for `256 Hz`
- * Feature: Full interval arithmetic e.g. `3/2 ^ 1/2` = `(3÷2) ^ (1÷2)` = `sqrt(3/2)` = `√3/2` = `n3`
- * Feature: Domain-specific arithmetic e.g. `3/2 + 4/3` = `17/6`, but `P5 + P4` = `P8`
- * Feature: Domain-independent arithmetic e.g. `3/2 ~* 4/3` = `2/1` and `P5 ~* P4` = `P8`
- * Feature: Enumerated chord syntax e.g. `5:6:7:8:9:10`
- * Feature: Vectorized operations e.g. `[4, 7, 12] \ 12`
- * Feature: Code comments e.g. `(* Nestable (* OCaml *) style comments *)`
- * Feature: Vals for equal tempering e.g. `<12 19 28]`, `17c@`, `17[^5]@`
- * Feature: Ups and downs with tempering e.g. `vM3;P5;P8;22@` for `[7, 13, 22] \ 22`
- * Feature: And much much more e.g. `sort(3^[-1..5] rdc 2);commaList(81/80)` for TE meantone[7]
- * Feature: Virtual piano now supports up to 4 layers of colors
- * Feature: Import scale title from .scl files
- * Feature: Aperiodic waveforms for metallic sounds
- * Feature: Add a button to select all MIDI inputs [#271](https://github.com/xenharmonic-devs/scale-workshop/issues/271), [#650](https://github.com/xenharmonic-devs/scale-workshop/issues/650)
- * Feature: Character palette with tooltips for syntax beyond ASCII [#533](https://github.com/xenharmonic-devs/scale-workshop/issues/533)
- * Feature: Interval matrix simplified by default [#536](https://github.com/xenharmonic-devs/scale-workshop/issues/536)
- * Feature: Convert scale to enumeration [#538](https://github.com/xenharmonic-devs/scale-workshop/issues/538)
- * Feature: Export interval labels and colors as comments in .scl files [#545](https://github.com/xenharmonic-devs/scale-workshop/issues/545)
- * Feature: More MOS coloring options [#554](https://github.com/xenharmonic-devs/scale-workshop/issues/554)
- * Feature: Variety and brightness signatures show in the interval matrix [#568](https://github.com/xenharmonic-devs/scale-workshop/issues/568)
- * Feature: Periodic equally tempered grids supported on the lattice tab
- * Feature: Lattice label sizes customizable [#581](https://github.com/xenharmonic-devs/scale-workshop/issues/581)
- * Feature: Lattice colors inverted and scale colors incorporated [#586](https://github.com/xenharmonic-devs/scale-workshop/issues/586)
- * Feature: Scott Dakota's prime rings on the lattice tab [#551](https://github.com/xenharmonic-devs/scale-workshop/issues/551)
- * Feature: Tonnetz prime ellipse coordinates on the lattice tab [#588](https://github.com/xenharmonic-devs/scale-workshop/issues/588)
- * Feature: New `latticeView()` command for displaying the order of intervals (prior to sorting) [#597](https://github.com/xenharmonic-devs/scale-workshop/issues/597)
- * Feature: New "repeat" modifier [#406](https://github.com/xenharmonic-devs/scale-workshop/issues/406)
- * Feature: Show labels, ratios, cents and frequencies on the tuning table [#534](https://github.com/xenharmonic-devs/scale-workshop/issues/534)
- * Feature: Implement multi-channel MIDI mode compatible with the Lumatone [#649](https://github.com/xenharmonic-devs/scale-workshop/pull/649)
- * Feature: Call the equave "octave", "tritave", "tetrave" or "pentave" when applicable [#694](https://github.com/xenharmonic-devs/scale-workshop/pull/694)
- * Feature: Full width view dedicated to the MOS pyramid [#700](https://github.com/xenharmonic-devs/scale-workshop/issues/700)
- * Feature: Add harmonic entropy to the analysis tab and expose as a helper function [#726](https://github.com/xenharmonic-devs/scale-workshop/issues/726)
- * Feature: Add equally tempered formatting as on option for the interval matrix [#740](https://github.com/xenharmonic-devs/scale-workshop/issues/740)
- * Bug fix: Fix handling of trailing comments when importing .scl files [#706](https://github.com/xenharmonic-devs/scale-workshop/issues/706), [#787](https://github.com/xenharmonic-devs/scale-workshop/issues/787)
- * Bug fix: Extreme ratios now only break parts of the tuning table that do not have IEEE floating point representation and format better when non-finite [#631](https://github.com/xenharmonic-devs/scale-workshop/issues/631), [#632](https://github.com/xenharmonic-devs/scale-workshop/issues/632)
- * Style fix: Make checkbox and radio button labels more consistent [#644](https://github.com/xenharmonic-devs/scale-workshop/issues/644)
- * Beta cycle issues: [#643](https://github.com/xenharmonic-devs/scale-workshop/issues/643), [#640](https://github.com/xenharmonic-devs/scale-workshop/issues/640), [#577](https://github.com/xenharmonic-devs/scale-workshop/issues/577), [#513](https://github.com/xenharmonic-devs/scale-workshop/issues/513), [#658](https://github.com/xenharmonic-devs/scale-workshop/issues/658), [#664](https://github.com/xenharmonic-devs/scale-workshop/issues/664), [#666](https://github.com/xenharmonic-devs/scale-workshop/issues/666), [#777](https://github.com/xenharmonic-devs/scale-workshop/issues/777), [#784](https://github.com/xenharmonic-devs/scale-workshop/issues/784) [#785](https://github.com/xenharmonic-devs/scale-workshop/issues/785), [#786](https://github.com/xenharmonic-devs/scale-workshop/issues/786)
- * Alpha cycle issues: [#574](https://github.com/xenharmonic-devs/scale-workshop/issues/574), [#579](https://github.com/xenharmonic-devs/scale-workshop/issues/579)
-
-## 2.4.1
- * Bug fix: Unison is no longer affected by random variance [#613](https://github.com/xenharmonic-devs/scale-workshop/issues/613)
-
-## 2.4.0
- * Feature: Export scales for Ableton Live 12 [#601](https://github.com/xenharmonic-devs/scale-workshop/issues/601)
- * Feature: MOS patterns supported by EDO can be sorted by size or hardness [#599](https://github.com/xenharmonic-devs/scale-workshop/issues/599)
- * Bug fix: The frequency for 1/1 is now at MIDI note for base frequency even in "White only" mode [#603](https://github.com/xenharmonic-devs/scale-workshop/issues/603)
-
-## 2.3.8
- * Feature: Rank-2 circle now displays generator ranges of valid MOS patterns [#580](https://github.com/xenharmonic-devs/scale-workshop/issues/580)
- * Bug fix: Pressing "More" for EDO inside the MOS modal now produces all supported MOS patterns
- * Bug fix: CPS and Span lattice modals now report basis parsing errors [#585](https://github.com/xenharmonic-devs/scale-workshop/issues/585)
- * Bug fix: MOS pattern errors no longer steal focus from the subgroup input during rank-2 generation [#587](https://github.com/xenharmonic-devs/scale-workshop/issues/587)
-
-## 2.3.7
- * Bug fix: Fix the bottom row of virtual QWERTY being offset by one [#452](https://github.com/xenharmonic-devs/scale-workshop/issues/452)
- * Bug fix: Fix the equave shift keys on virtual QWERTY [#564](https://github.com/xenharmonic-devs/scale-workshop/issues/563)
- * Bug fix: Fix rank-2 modal crashing when clearing number of periods [#573](https://github.com/xenharmonic-devs/scale-workshop/issues/573)
+## (UNRELEASED)
  * Documentation: Move changelog to a dedicated file [#556](https://github.com/xenharmonic-devs/scale-workshop/issues/556)
- * Documentation: Include an example NGINX config [#470](https://github.com/xenharmonic-devs/scale-workshop/issues/470)
 
 ## 2.3.6
  * Feature: Be more informative about why vals or commas do not span a rank-2 temperament [#540](https://github.com/xenharmonic-devs/scale-workshop/issues/540)
@@ -120,7 +27,7 @@
  * Improvement: Improve loading times with asynchronous components [#520](https://github.com/xenharmonic-devs/scale-workshop/issues/520)
  * Bug fix: Fix tempering in exotic subgroups [#518](https://github.com/xenharmonic-devs/scale-workshop/issues/518)
  * Bug fix: Close Korg export modal when pressing escape [#524](https://github.com/xenharmonic-devs/scale-workshop/issues/524)
- * Refactoring: Split isomorphic QWERTY into a re-usable package [#336](https://github.com/xenharmonic-devs/scale-workshop/issues/336)
+ * Refactoring: Split isomorhic QWERTY to s re-usable package [#336](https://github.com/xenharmonic-devs/scale-workshop/issues/336)
 
 ## 2.3.2
  * Bug fix: Make copy & paste possible outside of scale data [#515](https://github.com/xenharmonic-devs/scale-workshop/issues/515)
@@ -153,7 +60,7 @@
  * Feature: Light-weight algorithms for tempering in extremely large just intonation subgroups
  * Feature: Visualize how the various MIDI mappings assign scale degrees
  * Feature: Implement visual MIDI channel indicators
- * Feature: Interpret non-integer equal temperaments as cET
+ * Feature: Interprete non-integer equal temperaments as cET
  * Feature: Implement basic reverb using a ping-pong delay
  * Feature: Implement new metric prefixes from quecto to quetta
  * Standardization: Rename reference pitch to A4
@@ -190,7 +97,7 @@
 * Feature: Rank-2 scales can now be manipulated interactively by clicking on the period circle in a new tab inside the modal for *New scale → Rank-2 temperament*
 * Refactoring: Core functionality now at [scale-workshop-core](https://github.com/xenharmonic-devs/scale-workshop-core) for better reusability
 * Refactoring: Utility packages [xen-dev-utils](https://www.npmjs.com/package/xen-dev-utils), [moment-of-symmetry](https://www.npmjs.com/package/moment-of-symmetry) and [temperaments](https://www.npmjs.com/package/temperaments) are now sourced from npm.
-* Bug fix: Decimal dots in the interval matrix is now consistent with the tuning table
+* Bug fix: Decimal dots in the interval matrix is now consistent with the tunng table
 * Bug fix: Touching the screen in piano layout played multiple notes in unison
 * Bug fix: Typing out text in some of the scale creation modals made sound
 * Bug fix: Disable browser specific features like quick find on Firefox

@@ -7,16 +7,26 @@ const props = defineProps<{
   frequency: number
   cents: number
   ratio: number
-  label: string
-  color: string
-  active: boolean
+  name: string
+  symbol: string
+  keyColor: string
   isRoot: boolean
   equave: boolean
 }>()
 
 const element = ref<HTMLTableRowElement | null>(null)
 
+// Application state is not suited for real-time display
+// se we use hacks to bypass it.
 onMounted(() => {
+  const rows = (window as any).TUNING_TABLE_ROWS
+  const heldKeys = rows[props.index]?.heldKeys || 0
+  rows[props.index] = { heldKeys, element }
+
+  if (heldKeys) {
+    ;(element as any)._rawValue.classList.add('active')
+  }
+
   const isMediumOrLarger = window.matchMedia('screen and (min-width: 600px)').matches
 
   if (props.isRoot && isMediumOrLarger) {
@@ -26,13 +36,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <tr ref="element" :class="{ active, equave }" :style="'background-color:' + color + ';'">
-    <td class="key-color" :style="'background-color:' + color + ' !important;'"></td>
+  <tr ref="element" :class="{ equave }" :style="'background-color:' + keyColor + ';'">
+    <td class="key-color" :style="'background-color:' + keyColor + ' !important;'"></td>
     <td>{{ index }}</td>
     <td>{{ formatHertz(frequency) }}</td>
     <td>{{ formatExponential(cents) }}</td>
     <td>{{ formatExponential(ratio) }}</td>
-    <td>{{ label }}</td>
+    <td>{{ name }}</td>
+    <td>{{ symbol }}</td>
   </tr>
 </template>
 

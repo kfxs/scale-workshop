@@ -18,7 +18,7 @@ import {
   DecodedState
 } from '../url-encode'
 import { DEFAULT_NUMBER_OF_COMPONENTS } from '../constants'
-import { parseScaleWorkshop2Line } from 'sonic-weave'
+import { IntervalOptions, parseLine } from 'scale-workshop-core'
 
 describe('URL encoder', () => {
   it('can encode all line types', () => {
@@ -133,15 +133,6 @@ describe('URL encoder', () => {
   it('can decode invalid lines', () => {
     const expected = ['3/2', 'foo', 'BAR', '2/1']
     expect(arraysEqual(decodeLines('3F2_EfEoEo_EBAER_2F1'), expected)).toBeTruthy()
-  })
-
-  it('can encode repeated L characters in invalid lines', () => {
-    const lines = ['sLL', '9/8', '3/2', '2/1']
-    expect(encodeLines(lines)).toBe('EsELEL_9F8_3F2_2F1')
-  })
-
-  it('can decode repeated L characters in invalid lines', () => {
-    expect(decodeLines('EsELEL_9F8_3F2_2F1')).toEqual(['sLL', '9/8', '3/2', '2/1'])
   })
 })
 
@@ -410,10 +401,14 @@ describe('Decoding of scales found in the wild', () => {
   it.each(COMMUNITY_SCALES)('Decodes %s', (name, checksum, encoded) => {
     const url = new URL('https://scaleworkshop.plainsound.org/' + encoded)
     const decoded = decodeQuery(url.searchParams)
+    const options: IntervalOptions = {
+      centsFractionDigits: 3,
+      decimalFractionDigits: 5
+    }
     const intervals = decoded.scaleLines.map((line) =>
-      parseScaleWorkshop2Line(line, DEFAULT_NUMBER_OF_COMPONENTS)
+      parseLine(line, DEFAULT_NUMBER_OF_COMPONENTS, options)
     )
-    const centsSum = intervals.reduce((total, interval) => total + interval.value.totalCents(), 0)
+    const centsSum = intervals.reduce((total, interval) => total + interval.totalCents(), 0)
     expect(decoded.scaleName).toBe(name)
     expect(checksum).toBeCloseTo(centsSum)
   })

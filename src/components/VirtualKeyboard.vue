@@ -1,27 +1,23 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import VirtualKeyboardKey from '@/components/VirtualKeyboardKey.vue'
-import VirtualKeyInfo from '@/components/VirtualKeyInfo.vue'
-import type { Scale } from '@/scale'
+import { mmod } from 'xen-dev-utils'
+import ScoreView from '@/components/ScoreView.vue'
+import { useStateStore } from '@/stores/state'
 
 type NoteOff = () => void
 type NoteOnCallback = (index: number) => NoteOff
-type ColorMap = (index: number) => string
-type LabelMap = (index: number) => string
+
+const state = useStateStore()
 
 const props = defineProps<{
   baseIndex: number // Should incorporate equave shift
+  baseMidiNote: number
+  keyColors: string[]
   isomorphicHorizontal: number
   isomorphicVertical: number
   noteOn: NoteOnCallback
   heldNotes: Map<number, number>
-  scale: Scale
-  colorMap: ColorMap
-  labelMap: LabelMap
-  showLabel: boolean
-  showCents: boolean
-  showRatio: boolean
-  showFrequency: boolean
 }>()
 
 type VirtualKey = {
@@ -29,13 +25,10 @@ type VirtualKey = {
   y: number
   index: number
   color: string
-  frequency: number
-  cents: number
-  ratio: number
-  label: string
 }
 
 const virtualKeys = computed(() => {
+  const colors = props.keyColors.length ? props.keyColors : ['white']
   const horizontal = props.isomorphicHorizontal
   const vertical = props.isomorphicVertical
   const result: [number, VirtualKey[]][] = []
@@ -43,20 +36,11 @@ const virtualKeys = computed(() => {
     const row = []
     for (let x = 0; x <= 12; ++x) {
       const index = props.baseIndex + x * horizontal + y * vertical
-      const color = props.colorMap(index)
-      const ratio = props.scale.getRatio(index)
-      const frequency = props.scale.baseFrequency * ratio
-      const cents = props.scale.getCents(index)
-      const label = props.labelMap(index)
       row.push({
         x,
         y,
         index,
-        color,
-        frequency,
-        cents,
-        ratio,
-        label
+        color: colors[mmod(index - props.baseMidiNote, colors.length)]
       })
     }
     result.push([y, row])
@@ -68,36 +52,23 @@ const isMousePressed = ref(false)
 </script>
 
 <template>
+  <ScoreView v-show="state.showMusicalScore" />
   <table>
-    <tbody>
-      <tr v-for="[y, row] of virtualKeys" :key="y" :class="{ 'hidden-sm': y < 0 || y > 3 }">
-        <VirtualKeyboardKey
-          v-for="key of row"
-          :key="key.x"
-          :class="{
-            'hidden-sm': key.x > 8,
-            held: (heldNotes.get(key.index) || 0) > 0
-          }"
-          :index="key.index"
-          :color="key.color"
-          :isMousePressed="isMousePressed"
-          :noteOn="() => noteOn(key.index)"
-          @press="isMousePressed = true"
-          @unpress="isMousePressed = false"
-        >
-          <VirtualKeyInfo
-            :label="key.label"
-            :cents="key.cents"
-            :ratio="key.ratio"
-            :frequency="key.frequency"
-            :showLabel="props.showLabel"
-            :showCents="props.showCents"
-            :showRatio="props.showRatio"
-            :showFrequency="props.showFrequency"
-          />
-        </VirtualKeyboardKey>
-      </tr>
-    </tbody>
+    <tr v-for="[y, row] of virtualKeys" :key="y" :class="{ 'hidden-sm': y < 0 || y > 3 }">
+      <VirtualKeyboardKey
+        v-for="key of row"
+        :key="key.x"
+        :class="{
+          'hidden-sm': key.x > 8,
+          held: (heldNotes.get(key.index) || 0) > 0
+        }"
+        :color="key.color"
+        :isMousePressed="isMousePressed"
+        :noteOn="() => noteOn(key.index)"
+        @press="isMousePressed = true"
+        @unpress="isMousePressed = false"
+      ></VirtualKeyboardKey>
+    </tr>
   </table>
 </template>
 
@@ -108,6 +79,5 @@ table {
   width: 100%;
   height: 100%;
   min-width: 500px; /* this stops the keys getting too close together for portrait mobile users */
-  table-layout: fixed;
 }
 </style>

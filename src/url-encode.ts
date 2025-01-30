@@ -13,7 +13,7 @@ const LEFT_SQUARE_BRACKET = 'Q'
 const PLUS = 'P'
 const ESCAPE = 'E'
 
-// Color shorthands
+// Color shorhands
 const BLACK = '-'
 const WHITE = '~'
 const SEPARATOR = '_'
@@ -78,17 +78,39 @@ function decodeDigits(digits: string) {
   }
 }
 
+function encodeSymbol(scaleSymbol: string) {
+  scaleSymbol = scaleSymbol
+    .replace('#', 'S')
+    .replace('+', 'M')
+  return scaleSymbol
+}
+
+function decodeSymbol(scaleSymbol: string) {
+  scaleSymbol = scaleSymbol
+    .replace('S', '#')
+    .replace('M', '+')
+  return scaleSymbol
+}
+
+export function encodeSymbols(scaleSymbols: string[]) {
+  return scaleSymbols.map(encodeSymbol).join(NEWLINE)
+}
+
+export function decodeSymbols(symbolsEncoded: string) {
+  return symbolsEncoded.split(NEWLINE).map(decodeSymbol)
+}
+
 function encodeLine(scaleLine: string) {
   scaleLine = scaleLine
-    .replaceAll(ESCAPE, ESCAPE + ESCAPE)
-    .replaceAll(FRACTION, ESCAPE + FRACTION)
-    .replaceAll(COMMA, ESCAPE + COMMA)
-    .replaceAll(BACKSLASH, ESCAPE + BACKSLASH)
-    .replaceAll(SPACE, ESCAPE + SPACE)
-    .replaceAll(LEFT_ANGLE_BRACKET, ESCAPE + LEFT_ANGLE_BRACKET)
-    .replaceAll(RIGHT_ANGLE_BRACKET, ESCAPE + RIGHT_ANGLE_BRACKET)
-    .replaceAll(LEFT_SQUARE_BRACKET, ESCAPE + LEFT_SQUARE_BRACKET)
-    .replaceAll(PLUS, ESCAPE + PLUS)
+    .replace(ESCAPE, ESCAPE + ESCAPE)
+    .replace(FRACTION, ESCAPE + FRACTION)
+    .replace(COMMA, ESCAPE + COMMA)
+    .replace(BACKSLASH, ESCAPE + BACKSLASH)
+    .replace(SPACE, ESCAPE + SPACE)
+    .replace(LEFT_ANGLE_BRACKET, ESCAPE + LEFT_ANGLE_BRACKET)
+    .replace(RIGHT_ANGLE_BRACKET, ESCAPE + RIGHT_ANGLE_BRACKET)
+    .replace(LEFT_SQUARE_BRACKET, ESCAPE + LEFT_SQUARE_BRACKET)
+    .replace(PLUS, ESCAPE + PLUS)
 
   scaleLine = scaleLine
     .replace(/\//g, FRACTION)
@@ -99,7 +121,7 @@ function encodeLine(scaleLine: string) {
     .replace(/>/g, RIGHT_ANGLE_BRACKET)
     .replace(/\[/g, LEFT_SQUARE_BRACKET)
     .replace(/\+/g, PLUS)
-  let lastNonDigit = ''
+  let lastNondigit = ''
   let result = ''
   let currentNumber = ''
 
@@ -107,13 +129,13 @@ function encodeLine(scaleLine: string) {
     if (isDigit(character)) {
       currentNumber += character
     } else {
-      result += encodeDigits(currentNumber, !'.,'.includes(lastNonDigit))
+      result += encodeDigits(currentNumber, !'.,'.includes(lastNondigit))
       currentNumber = ''
-      lastNonDigit = character
+      lastNondigit = character
       result += escapeCharacter(character)
     }
   })
-  return result + encodeDigits(currentNumber, !'.,'.includes(lastNonDigit))
+  return result + encodeDigits(currentNumber, !'.,'.includes(lastNondigit))
 }
 
 function decodeLine(encoded: string) {
@@ -407,6 +429,7 @@ function unmillify(encoded: string) {
 
 export type DecodedState = {
   scaleLines: string[]
+  scaleSymbols: string[]
   keyColors: string[]
   scaleName: string
   baseFrequency: number
@@ -430,6 +453,7 @@ export type DecodedState = {
 
 export type EncodedState = {
   l?: string // (scale) Lines
+  sy?: string// (scale) Symbols
   c?: string // (key) Colors
   n?: string // (scale) Name
   f?: string // (base) Frequency
@@ -470,7 +494,9 @@ export function decodeQuery(query: LocationQuery | URLSearchParams): DecodedStat
   } else if (get('p', 'a') === '1') {
     pianoMode = 'QweZxc1'
   }
+
   return {
+    scaleSymbols: decodeSymbols(get('sy', '')),
     scaleLines: decodeLines(get('l', '')),
     keyColors: decodeKeyColors(get('c', '~-~~-~-~~-~-')),
     scaleName: get('n', ''),
@@ -503,6 +529,7 @@ export function encodeQuery(state: DecodedState): EncodedState {
   }
   const result: EncodedState = {
     n: state.scaleName,
+    sy: encodeSymbols(state.scaleSymbols),
     l: encodeLines(state.scaleLines),
     c: encodeKeyColors(state.keyColors),
     f: state.baseFrequency.toString(36),
@@ -527,6 +554,9 @@ export function encodeQuery(state: DecodedState): EncodedState {
   // The app includes version information so we can safely strip defaults
   if (!result.n?.length) {
     delete result.n
+  }
+  if (!result.sy?.length) {
+    delete result.sy
   }
   if (!result.l?.length) {
     delete result.l

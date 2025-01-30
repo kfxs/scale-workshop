@@ -1,5 +1,5 @@
 import { DEFAULT_NUMBER_OF_COMPONENTS, NEWLINE_TEST, UNIX_NEWLINE } from '@/constants'
-import { Interval, parseScaleWorkshop2Line } from 'sonic-weave'
+import { getLineType, LINE_TYPE, parseLine, Scale, type Interval } from 'scale-workshop-core'
 
 // decodes HTML entities
 function decodeHTML(input: string): string {
@@ -83,7 +83,7 @@ export class ScaleWorkshopOneData {
     this.vertical = searchParams.getNumber('vert', 5)
     this.horizontal = searchParams.getNumber('horiz', 1)
 
-    // get key colors
+    // get key colours
     this.colors = searchParams.get('colors')
 
     // get synth options
@@ -111,9 +111,14 @@ export class ScaleWorkshopOneData {
       if (!line.length) {
         return
       }
-      intervals.push(parseScaleWorkshop2Line(line, DEFAULT_NUMBER_OF_COMPONENTS))
+      const lineType = getLineType(line)
+      if (lineType === LINE_TYPE.INVALID) {
+        throw new Error(`Failed to parse line ${line}`)
+      }
+      intervals.push(parseLine(line, DEFAULT_NUMBER_OF_COMPONENTS))
     })
-    return intervals
+    const scale = Scale.fromIntervalArray(intervals, this.freq)
+    return scale
   }
 
   get attackTime() {

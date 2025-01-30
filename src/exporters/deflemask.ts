@@ -11,10 +11,12 @@ export default class DeflemaskExporter extends BaseExporter {
   static minNote = 1
   static maxNote = 95
 
+  params: ExporterParams
   appTitle: string
 
   constructor(params: ExporterParams) {
-    super(params)
+    super()
+    this.params = params
     this.appTitle = params.appTitle || APP_TITLE
   }
 

@@ -2,11 +2,8 @@
 import VirtualTypingKeyboard from '@/components/VirtualTypingKeyboard.vue'
 import type { Keyboard } from 'isomorphic-qwerty'
 import { useStateStore } from '@/stores/state'
-import { useScaleStore } from '@/stores/scale'
-import { computed } from 'vue'
 
 const state = useStateStore()
-const scale = useScaleStore()
 
 type NoteOff = () => void
 type NoteOnCallback = (index: number) => NoteOff
@@ -16,22 +13,20 @@ defineProps<{
   typingKeyboard: Keyboard
 }>()
 
-const baseIndex = computed(
-  () => scale.scale.baseMidiNote + scale.equaveShift * scale.scale.size + scale.degreeShift
-)
+defineEmits(['update:equaveShift', 'update:degreeShift'])
 </script>
 
 <template>
   <main>
     <VirtualTypingKeyboard
-      :baseIndex="baseIndex"
-      :isomorphicHorizontal="scale.isomorphicHorizontal"
-      :keyboardMode="scale.keyboardMode"
+      :baseIndex="state.baseIndex"
+      :baseMidiNote="state.baseMidiNote"
+      :isomorphicHorizontal="state.isomorphicHorizontal"
+      :keyboardMode="state.keyboardMode"
       :colorScheme="state.colorScheme"
-      :qwertyMapping="scale.qwertyMapping"
-      :hasLeftOfZ="scale.hasLeftOfZ"
-      :isomorphicVertical="scale.isomorphicVertical"
-      :colorMap="scale.colorForIndex"
+      :keyboardMapping="state.keyboardMapping"
+      :isomorphicVertical="state.isomorphicVertical"
+      :keyColors="state.keyColors"
       :noteOn="noteOn"
       :heldNotes="state.heldNotes"
       :typingKeyboard="typingKeyboard"
@@ -40,10 +35,10 @@ const baseIndex = computed(
       :equaveDownCode="state.equaveDownCode"
       :degreeUpCode="state.degreeUpCode"
       :degreeDownCode="state.degreeDownCode"
-      :equaveShift="scale.equaveShift"
-      :degreeShift="scale.degreeShift"
-      @update:equaveShift="scale.equaveShift = $event"
-      @update:degreeShift="scale.degreeShift = $event"
+      :equaveShift="state.equaveShift"
+      :degreeShift="state.degreeShift"
+      @update:equaveShift="$emit('update:equaveShift', $event)"
+      @update:degreeShift="$emit('update:degreeShift', $event)"
     ></VirtualTypingKeyboard>
   </main>
 </template>

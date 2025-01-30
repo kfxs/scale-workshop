@@ -1,67 +1,57 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import { CS_EDO, CS_VAL, FIFTH, FIFTH_12TET, OCTAVE } from '@/constants'
-import { computedAndError, splitText } from '@/utils'
-import { Fraction, clamp, falsifyConstantStructure, gcd, mmod } from 'xen-dev-utils'
+import { FIFTH, FIFTH_12TET, OCTAVE, THIRD } from '@/constants'
+import { computedAndError, parseChordInput, splitText } from '@/utils'
+import { clamp, gcd } from 'xen-dev-utils'
 import {
   anyForEdo,
   makeEdoMap,
   tamnamsInfo,
+  type MosScaleInfo,
   modeInfo,
   getHardness,
   allForEdo
 } from 'moment-of-symmetry'
-import {
-  TimeMonzo,
-  TimeReal,
-  evaluateExpression,
-  hasConstantStructure,
-  parseChord
-} from 'sonic-weave'
-import { freeVAOs, vao } from '@/analysis'
-
-function scaleGet(monzos: TimeMonzo[], index: number) {
-  const equave = monzos[monzos.length - 1]
-  const numEquaves = Math.floor(index / monzos.length)
-  return monzos[mmod(index, monzos.length)].mul(equave.pow(numEquaves))
-}
-
-export const MAX_EQUAL_TEMPERAMENT_SIZE = 1024
+import { type IntervalType } from 'scale-workshop-core'
 
 export const useModalStore = defineStore('modal', () => {
   // Generic
   const equaveString = ref('2/1')
   const equave = ref(OCTAVE)
 
-  // CPS
+  // CPS / Cross-polytype
   const factorsString = ref('')
   const addUnity = ref(false)
   const [factors, factorsError] = computedAndError(() => {
-    return parseChord(factorsString.value)
+    return parseChordInput(factorsString.value)
   }, [])
-  const numElements = ref(2)
-  const maxElements = computed(() => Math.max(1, factors.value.length))
+
+  // Dwarf / Euler genus
+  const integerEquave = ref(2)
 
   // Harmonics / Subharmonics
   const lowInteger = ref(8)
   const highInteger = ref(16)
 
+  // CPS
+  const numElements = ref(2)
+  const maxElements = computed(() => Math.max(1, factors.value.length))
+
+  // Dwarf
+  const val = ref(12)
+
   // Enumerate chord
   const chord = ref('')
-  const retrovertChord = ref(false)
-  const chordIntervals = computed(() => parseChord(chord.value))
+  const invertChord = ref(false)
 
   // Equal temperament
   const divisions = ref(5)
-  const simpleEd = ref(true)
   const jumpsString = ref('1 1 1 1 1')
   const degreesString = ref('1 2 3 4 5')
   const singleStepOnly = computed(
     () => divisions.value !== Math.round(divisions.value) || divisions.value < 1
   )
-  const safeScaleSize = computed(() =>
-    Math.round(clamp(1, MAX_EQUAL_TEMPERAMENT_SIZE, divisions.value))
-  )
+  const safeScaleSize = computed(() => Math.round(clamp(1, 1024, divisions.value)))
   const jumps = computed(() => splitText(jumpsString.value).map((token) => parseInt(token, 10)))
   const degrees = computed(() => splitText(degreesString.value).map((token) => parseInt(token, 10)))
 
@@ -70,7 +60,6 @@ export const useModalStore = defineStore('modal', () => {
       jumpsString.value = ''
       degreesString.value = ''
     } else {
-      simpleEd.value = true
       jumpsString.value = Array(safeScaleSize.value).fill('1').join(' ')
       degreesString.value = [...Array(safeScaleSize.value).keys()]
         .map((k) => (k + 1).toString())
@@ -88,7 +77,6 @@ export const useModalStore = defineStore('modal', () => {
       degree += jump
       degrees_.push(degree.toString())
     })
-    simpleEd.value = false
     divisions.value = degree
     degreesString.value = degrees_.join(' ')
   }
@@ -103,156 +91,12 @@ export const useModalStore = defineStore('modal', () => {
       jumps_.push((degree - previous).toString())
       previous = degree
     })
-    simpleEd.value = false
     divisions.value = previous
     jumpsString.value = jumps_.join(' ')
   }
 
   // Euler genus
-  const integerEquave = ref(2)
   const guideTone = ref(45)
-  const rootTone = ref(3)
-
-  watch(rootTone, (newValue, oldValue) => {
-    let redo = newValue < 1 || newValue > guideTone.value
-    newValue = clamp(1, guideTone.value, newValue)
-    const step = oldValue < newValue ? 1 : -1
-    while (guideTone.value % newValue) {
-      newValue += step
-      redo = true
-    }
-    if (redo) {
-      rootTone.value = newValue
-    }
-  })
-
-  watch(guideTone, (newValue) => {
-    if (newValue % rootTone.value) {
-      rootTone.value = rootTone.value - 1
-    }
-  })
-
-  // Generator sequence
-  const periodString = ref('2/1')
-  const period = ref(OCTAVE)
-  const numPeriods = ref(1)
-  const size = ref(5)
-  const generatorsString = ref('')
-  const [generators, generatorsError] = computedAndError(() => {
-    let source = generatorsString.value
-    // Enumerated chords mean something different in the context of GS
-    if (source.includes(':')) {
-      source = 'geodiff(' + source + ')'
-    }
-    return parseChord(source)
-  }, [])
-  const constantStructureSizes = reactive<number[]>([])
-  // These sizes are per period.
-  const maxSizeComputed = ref(2)
-  function computeConstantStructureSizes(maxSize: number) {
-    if (isNaN(numPeriods.value)) {
-      return
-    }
-    if (maxSize <= maxSizeComputed.value) {
-      return
-    }
-    const p = period.value.value
-    if (!(p instanceof TimeMonzo)) {
-      return
-    }
-    if (p.timeExponent.n) {
-      return
-    }
-    const monzos = generators.value.map((g) => g.value)
-    if (!monzos.length) {
-      return
-    }
-    let usePrecheck = p.equals(OCTAVE.value)
-    for (const monzo of monzos) {
-      if (monzo instanceof TimeReal) {
-        return
-      }
-      if (monzo.timeExponent.n) {
-        return
-      }
-      if (!monzo.isFractional()) {
-        usePrecheck = false
-      }
-    }
-    const scale: TimeMonzo[] = [p]
-    let accumulator = new TimeMonzo(new Fraction(0), [])
-    for (let j = 0; j < maxSizeComputed.value; ++j) {
-      accumulator = accumulator.mul(monzos[mmod(j, monzos.length)]) as TimeMonzo
-      scale.push(accumulator.reduce(p, true) as TimeMonzo)
-    }
-    // A JI scale has CS if a tempered version has it. (but not vice versa)
-    if (usePrecheck) {
-      const gens = monzos.map((m) => m.dot(CS_VAL).valueOf())
-      const steps: number[] = [CS_EDO]
-      let stepAccumulator = 0
-      for (let j = 0; j < maxSizeComputed.value; ++j) {
-        stepAccumulator += gens[mmod(j, gens.length)]
-        steps.push(mmod(stepAccumulator, CS_EDO) || CS_EDO)
-      }
-      for (let i = maxSizeComputed.value; i < maxSize; ++i) {
-        accumulator = accumulator.mul(monzos[mmod(i, monzos.length)]) as TimeMonzo
-        scale.push(accumulator.reduce(p, true) as TimeMonzo)
-        stepAccumulator += gens[mmod(i, gens.length)]
-        steps.push(mmod(stepAccumulator, CS_EDO) || CS_EDO)
-        steps.sort((a, b) => a - b)
-        const indices = falsifyConstantStructure(steps)
-        if (indices) {
-          scale.sort((a, b) => a.compare(b))
-          const [[i1, i2], [j1, j2]] = indices
-          // Check the given counter-example. Do the full check if it wasn't valid in JI.
-          if (
-            !scaleGet(scale, i2)
-              .div(scaleGet(scale, i1))
-              .equals(scaleGet(scale, j2).div(scaleGet(scale, j1))) &&
-            hasConstantStructure(scale)
-          ) {
-            constantStructureSizes.push(scale.length * numPeriods.value)
-          }
-        } else {
-          constantStructureSizes.push(scale.length * numPeriods.value)
-        }
-      }
-    } else {
-      for (let i = maxSizeComputed.value; i < maxSize; ++i) {
-        accumulator = accumulator.mul(monzos[mmod(i, monzos.length)]) as TimeMonzo
-        scale.push(accumulator.reduce(p, true) as TimeMonzo)
-        scale.sort((a, b) => a.compare(b))
-        if (hasConstantStructure(scale)) {
-          // These sizes are for the full scale.
-          constantStructureSizes.push(scale.length * numPeriods.value)
-        }
-      }
-    }
-    maxSizeComputed.value = maxSize
-  }
-  watch([generators, period, numPeriods], () => {
-    maxSizeComputed.value = 2
-    constantStructureSizes.length = 0
-  })
-  watch(size, (newValue) => {
-    newValue = parseInt(newValue as unknown as string, 10)
-    if (isNaN(newValue) || isNaN(numPeriods.value)) {
-      return
-    }
-    if (newValue % numPeriods.value) {
-      size.value = Math.ceil(newValue / numPeriods.value) * numPeriods.value
-    }
-    if (newValue < 1) {
-      size.value = 1
-    }
-  })
-  watch(numPeriods, (newValue) => {
-    newValue = parseInt(newValue as unknown as string, 10)
-    if (isNaN(newValue) || isNaN(size.value)) {
-      return
-    }
-    size.value = Math.ceil(size.value / newValue) * newValue
-  })
 
   // === MOS ===
   // State required to generate MOS
@@ -293,16 +137,14 @@ export const useModalStore = defineStore('modal', () => {
     Math.min(Math.floor(up.value / numberOfPeriods.value) * numberOfPeriods.value, upMax.value)
   )
   // Selections
-  const edoMap = reactive(makeEdoMap())
-  const minSize = ref(5)
-  const maxSize = ref(12)
-  const maxHardness = ref(5)
+  const edoMap = computed(() => makeEdoMap())
+  const edoExtraMap = reactive<Map<number, MosScaleInfo[]>>(new Map())
   const edoList = computed(() => {
     const edo_ = boundedEdo.value
-    if (edoMap.has(edo_)) {
-      return edoMap.get(edo_)!
+    if (!edoMap.value.has(edo_)) {
+      return [anyForEdo(edo_)].concat(edoExtraMap.get(edo_) || [])
     }
-    return [anyForEdo(edo_)]
+    return edoMap.value.get(edo_)!.concat(edoExtraMap.get(edo_) || [])
   })
   // Additional information
   const tamnamsName = computed(() => {
@@ -340,87 +182,57 @@ export const useModalStore = defineStore('modal', () => {
   watch(upMax, (newValue) => {
     up.value = Math.min(up.value, newValue)
   })
-  watch(minSize, (newValue) => {
-    maxSize.value = Math.max(maxSize.value, newValue)
-  })
   // Methods
-  function sortByHardness() {
-    const edo_ = boundedEdo.value
-    const patterns = edoMap.get(edo_) ?? [anyForEdo(edo_)]
-    patterns.sort(
-      (a, b) =>
-        a.sizeOfLargeStep * b.sizeOfSmallStep - b.sizeOfLargeStep * a.sizeOfSmallStep ||
-        a.numberOfLargeSteps - b.numberOfLargeSteps
-    )
-    edoMap.set(edo_, patterns)
-  }
-  function sortBySize() {
-    const edo_ = boundedEdo.value
-    const patterns = edoMap.get(edo_) ?? [anyForEdo(edo_)]
-    patterns.sort(
-      (a, b) =>
-        a.numberOfLargeSteps + a.numberOfSmallSteps - b.numberOfLargeSteps - b.numberOfSmallSteps ||
-        a.numberOfLargeSteps - b.numberOfLargeSteps
-    )
-    edoMap.set(edo_, patterns)
-  }
   function moreForEdo() {
     const edo_ = boundedEdo.value
-    edoMap.set(
-      edo_,
-      allForEdo(edo_, minSize.value, Math.min(edo_, maxSize.value), maxHardness.value)
-    )
+    const existing = edoList.value
+    const extra = allForEdo(edo_, 5, 12, 5)
+    const more = []
+    for (const info of extra) {
+      let novel = true
+      for (const old of existing) {
+        if (
+          info.mosPattern === old.mosPattern &&
+          info.sizeOfLargeStep === old.sizeOfLargeStep &&
+          info.sizeOfSmallStep === old.sizeOfSmallStep
+        ) {
+          novel = false
+          break
+        }
+      }
+      if (novel) {
+        more.push(info)
+      }
+    }
+    edoExtraMap.set(edo_, more)
   }
 
   // Approximate by harmonics/subharmonics
   const largeInteger = ref(128)
 
   // Convert type
-  const type = ref<
-    'decimal' | 'fraction' | 'radical' | 'cents' | 'FJS' | 'absoluteFJS' | 'nedji' | 'monzo'
-  >('cents')
-  const fractionTolerance = ref<number>(0)
+  const type = ref<IntervalType>('cents')
   const preferredNumerator = ref<number>(0)
   const preferredDenominator = ref<number>(0)
-  const preferredEtNumerator = ref<number>(0)
   const preferredEtDenominator = ref<number>(0)
   const preferredEtEquaveNumerator = ref<number>(0)
-  const preferredEtEquaveDenominator = ref<number>(0)
+  const preferredEtEquaveDenominator = ref<number>(1)
 
   // Equalize
   const largeDivisions = ref(22)
-  const safeLargeDivisions = computed(() => {
-    const value = largeDivisions.value
-    if (isNaN(value) || !isFinite(value)) {
-      return 1
-    }
-    if (value < 1) {
-      return 1
-    }
-    return Math.round(value)
-  })
 
   // Merge offset
-  const overflowType = ref<'keep' | 'drop' | 'wrap'>('drop')
-  const offsetsString = ref('')
-  const [offsets, offsetsError] = computedAndError(() => {
-    const source = offsetsString.value
-    // Enumerated chords are literal in the context of polyoffsets
-    if (source.includes(':')) {
-      return evaluateExpression(source)
-    }
-    return parseChord(source)
-  }, [])
+  const offset = ref(THIRD)
+  const offsetString = ref('')
+  // Overflow = "none" is too similar to "reduce" to be included in the UI.
+  const overflowType = ref<'none' | 'intuitive' | 'filter' | 'reduce'>('filter')
 
   // Random variance
   const varianceAmount = ref(10)
   const varyEquave = ref(false)
 
-  // Repeat scale
-  const numRepeats = ref(2)
-
   // Rotate scale
-  const newUnison = ref(0)
+  const newUnison = ref(1)
 
   // Stretch
   const stretchAmount = ref(1.005)
@@ -432,13 +244,12 @@ export const useModalStore = defineStore('modal', () => {
   const target = ref(FIFTH)
 
   function calculateStretchAmount() {
-    const calculated = target.value.value.totalCents() / reference.value.value.totalCents()
+    const calculated = target.value.totalCents() / reference.value.totalCents()
     if (calculated >= 0.001 && calculated <= 999.999) {
       stretchAmount.value = calculated
     }
   }
 
-  // Subset
   const selected = reactive<Set<number>>(new Set())
 
   function toggleSelected(index: number) {
@@ -450,7 +261,7 @@ export const useModalStore = defineStore('modal', () => {
   }
 
   function initialize(size: number) {
-    newUnison.value = clamp(0, size - 1, newUnison.value)
+    newUnison.value = clamp(newUnison.value, 1, size - 1)
     selected.clear()
     selected.add(0)
     for (let i = 1; i < size; ++i) {
@@ -458,70 +269,34 @@ export const useModalStore = defineStore('modal', () => {
     }
   }
 
-  // Coalesce
-  const tolerance = ref(3.5)
-  const coalescingAction = ref<'avg' | 'havg' | 'geoavg' | 'lowest' | 'highest' | 'simplest'>(
-    'simplest'
-  )
-  const preserveBoundary = ref(false)
-
-  // Concordance shell
-  const mediumInteger = ref(32)
-  const errorModel = ref<'rooted' | 'free'>('rooted')
-  const vaoIndex = ref(0)
-  const vaos = computed(() => {
-    if (errorModel.value === 'rooted') {
-      return [
-        vao(
-          mediumInteger.value,
-          largeInteger.value,
-          safeLargeDivisions.value,
-          tolerance.value,
-          equave.value.totalCents()
-        )
-      ]
-    }
-    return freeVAOs(
-      mediumInteger.value,
-      largeInteger.value,
-      safeLargeDivisions.value,
-      tolerance.value,
-      equave.value.totalCents()
-    )
-  })
-
-  watch([mediumInteger, largeInteger, largeDivisions, tolerance, equave, errorModel], () => {
-    vaoIndex.value = 0
-  })
-
-  // Expand
-  const simplify = ref(false)
-  const bleach = ref(false)
-
   return {
     // Generic
     equaveString,
     equave,
 
-    // CPS
+    // CPS / Cross-polytype
     factorsString,
     addUnity,
     factors,
     factorsError,
-    numElements,
-    maxElements,
 
-    // Euler genus
+    // Dwarf / Euler genus
     integerEquave,
 
     // Harmonics / Subharmonics
     lowInteger,
     highInteger,
 
+    // CPS
+    numElements,
+    maxElements,
+
+    // Dwarf
+    val,
+
     // Enumerate chord
     chord,
-    retrovertChord,
-    chordIntervals,
+    invertChord,
 
     // Equal temperament
     divisions,
@@ -531,26 +306,12 @@ export const useModalStore = defineStore('modal', () => {
     safeScaleSize,
     jumps,
     degrees,
-    simpleEd,
     updateFromDivisions,
     updateFromJumps,
     updateFromDegrees,
 
     // Euler genus
     guideTone,
-    rootTone,
-
-    // Generator sequence
-    periodString,
-    period,
-    numPeriods,
-    size,
-    generatorsString,
-    generators,
-    generatorsError,
-    constantStructureSizes,
-    maxSizeComputed,
-    computeConstantStructureSizes,
 
     // MOS
     numberOfLargeSteps,
@@ -574,9 +335,7 @@ export const useModalStore = defineStore('modal', () => {
     upMax,
     safeUp,
     edoMap,
-    minSize,
-    maxSize,
-    maxHardness,
+    edoExtraMap,
     edoList,
     tamnamsName,
     mosModeInfo,
@@ -584,45 +343,30 @@ export const useModalStore = defineStore('modal', () => {
     hostEd,
     ed,
     previewName,
-    sortByHardness,
-    sortBySize,
     moreForEdo,
-
-    // Concordance shell
-    mediumInteger,
-    vaoIndex,
-    vaos,
-    errorModel,
 
     // Approximate by harmonics/subharmonics
     largeInteger,
 
     // Convert type
     type,
-    fractionTolerance,
     preferredNumerator,
     preferredDenominator,
-    preferredEtNumerator,
     preferredEtDenominator,
     preferredEtEquaveNumerator,
     preferredEtEquaveDenominator,
 
     // Equalize
     largeDivisions,
-    safeLargeDivisions,
 
     // Merge offset
-    offsets,
-    offsetsString,
-    offsetsError,
+    offset,
+    offsetString,
     overflowType,
 
     // Random variance
     varianceAmount,
     varyEquave,
-
-    // Repeat
-    numRepeats,
 
     // Rotate
     newUnison,
@@ -638,15 +382,6 @@ export const useModalStore = defineStore('modal', () => {
     // Subset
     selected,
     toggleSelected,
-    initialize,
-
-    // Coalesce
-    tolerance,
-    coalescingAction,
-    preserveBoundary,
-
-    // Expand
-    simplify,
-    bleach
+    initialize
   }
 })

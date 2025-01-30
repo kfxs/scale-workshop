@@ -38,21 +38,6 @@ const router = createRouter({
       component: () => import('../views/AboutView.vue')
     },
     {
-      path: '/scale/:id',
-      name: 'load-scale',
-      component: () => import('../views/LoadScaleView.vue')
-    },
-    {
-      path: '/privacy-policy',
-      name: 'privacy-policy',
-      component: () => import('../views/PrivacyPolicy.vue')
-    },
-    {
-      path: '/terms-of-service',
-      name: 'terms-of-service',
-      component: () => import('../views/TermsOfService.vue')
-    },
-    {
       path: '/analysis',
       name: 'analysis',
       component: () => import('../views/AnalysisView.vue')
@@ -69,7 +54,7 @@ const router = createRouter({
     },
     {
       path: '/prefs',
-      name: 'preferences',
+      name: 'preferencess',
       component: () => import('../views/PreferencesView.vue')
     },
     {
@@ -86,11 +71,6 @@ const router = createRouter({
       path: '/qwerty',
       name: 'qwerty',
       component: () => import('../views/VirtualQwerty.vue')
-    },
-    {
-      path: '/mos',
-      name: 'mos',
-      component: () => import('../views/MosView.vue')
     },
     // Root aliases mainly for compatibility with old SW1 URLs.
     {

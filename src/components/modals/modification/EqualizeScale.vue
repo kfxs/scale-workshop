@@ -1,59 +1,23 @@
 <script setup lang="ts">
-import { alignCents, misalignment } from '@/analysis'
 import Modal from '@/components/ModalDialog.vue'
-import { OCTAVE } from '@/constants'
+import type { Scale } from 'scale-workshop-core'
 import { useModalStore } from '@/stores/modal'
-import { useScaleStore } from '@/stores/scale'
-import { computed } from 'vue'
-import { valueToCents } from 'xen-dev-utils'
-import { linear } from 'sonic-weave'
 
-defineProps<{
-  show: boolean
+const props = defineProps<{
+  scale: Scale
 }>()
 
-const emit = defineEmits(['done', 'cancel'])
+const emit = defineEmits(['update:scale', 'cancel'])
 
 const modal = useModalStore()
-const scale = useScaleStore()
 
-const equalizedScaleData = computed(() => {
-  const pitches = [...Array(scale.scale.size).keys()].map((i) =>
-    valueToCents(Math.abs(scale.scale.getRatio(i + scale.scale.baseMidiNote)))
-  )
-  const gridCents = valueToCents(scale.scale.equaveRatio) / modal.safeLargeDivisions
-  if (modal.errorModel === 'rooted') {
-    const error = misalignment(pitches, gridCents)
-    return { error, degrees: [] }
-  }
-  return alignCents(pitches, gridCents)
-})
-
-function modify(expand = true) {
-  if (modal.errorModel === 'rooted') {
-    scale.sourceText += `\nequalize(${modal.safeLargeDivisions})`
-    if (expand) {
-      const { visitor, defaults } = scale.getUserScopeVisitor()
-      scale.sourceText = visitor.expand(defaults)
-    }
-  } else {
-    const degrees = [...equalizedScaleData.value.degrees]
-    degrees.shift()
-    degrees.push(modal.safeLargeDivisions)
-    let postfix = `\\${modal.safeLargeDivisions}`
-    const equave = scale.relativeIntervals[scale.relativeIntervals.length - 1]
-    if (equave.compare(OCTAVE)) {
-      postfix += `ed ${linear(equave).toString()}`
-    }
-    scale.sourceText = degrees.map((d) => `${d}${postfix}`).join('\n')
-  }
-  scale.computeScale()
-  emit('done')
+function modify() {
+  emit('update:scale', props.scale.approximateEqualTemperament(modal.largeDivisions))
 }
 </script>
 
 <template>
-  <Modal :show="show" @confirm="modify" @cancel="$emit('cancel')">
+  <Modal @confirm="modify" @cancel="$emit('cancel')">
     <template #header>
       <h2>Equalize</h2>
     </template>
@@ -73,25 +37,6 @@ function modify(expand = true) {
             v-model="modal.largeDivisions"
           />
         </div>
-        <div class="control radio-group">
-          <label>Error model</label>
-          <span>
-            <input type="radio" id="error-rooted" value="rooted" v-model="modal.errorModel" />
-            <label for="error-rooted">Rooted</label>
-          </span>
-          <span>
-            <input type="radio" id="error-free" value="free" v-model="modal.errorModel" />
-            <label for="error-free">Free</label>
-          </span>
-        </div>
-        <p>Error: {{ equalizedScaleData.error.toFixed(5) }} c</p>
-      </div>
-    </template>
-    <template #footer>
-      <div class="btn-group">
-        <button @click="modify(true)">OK</button>
-        <button @click="$emit('cancel')">Cancel</button>
-        <button @click="modify(false)" :disabled="modal.errorModel === 'free'">Raw</button>
       </div>
     </template>
   </Modal>

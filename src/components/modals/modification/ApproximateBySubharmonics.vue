@@ -1,42 +1,23 @@
 <script setup lang="ts">
 import Modal from '@/components/ModalDialog.vue'
+import type { Scale } from 'scale-workshop-core'
 import { useModalStore } from '@/stores/modal'
-import { useScaleStore } from '@/stores/scale'
-import { computed } from 'vue'
-import { valueToCents } from 'xen-dev-utils'
 
-defineProps<{
-  show: boolean
+const props = defineProps<{
+  scale: Scale
 }>()
 
-const emit = defineEmits(['done', 'cancel'])
+const emit = defineEmits(['update:scale', 'cancel'])
 
 const modal = useModalStore()
-const scale = useScaleStore()
 
-const error = computed(() => {
-  let result = 0
-  for (const ratio of scale.scale.intervalRatios) {
-    const denominator = Math.round(modal.largeInteger / ratio)
-    const approximation = modal.largeInteger / denominator
-    result = Math.max(result, Math.abs(valueToCents(Math.abs(approximation / ratio))))
-  }
-  return result
-})
-
-function modify(expand = true) {
-  scale.sourceText += `\ntoSubharmonics(${modal.largeInteger})`
-  if (expand) {
-    const { visitor, defaults } = scale.getUserScopeVisitor()
-    scale.sourceText = visitor.expand(defaults)
-  }
-  scale.computeScale()
-  emit('done')
+function modify() {
+  emit('update:scale', props.scale.approximateSubharmonics(modal.largeInteger))
 }
 </script>
 
 <template>
-  <Modal :show="show" @confirm="modify" @cancel="$emit('cancel')">
+  <Modal @confirm="modify" @cancel="$emit('cancel')">
     <template #header>
       <h2>Approximate by subharmonics</h2>
     </template>
@@ -53,14 +34,6 @@ function modify(expand = true) {
             v-model="modal.largeInteger"
           />
         </div>
-        <p>Error: {{ error.toFixed(5) }} c</p>
-      </div>
-    </template>
-    <template #footer>
-      <div class="btn-group">
-        <button @click="modify(true)">OK</button>
-        <button @click="$emit('cancel')">Cancel</button>
-        <button @click="modify(false)">Raw</button>
       </div>
     </template>
   </Modal>

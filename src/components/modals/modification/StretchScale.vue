@@ -1,33 +1,33 @@
 <script setup lang="ts">
 import Modal from '@/components/ModalDialog.vue'
 import ScaleLineInput from '@/components/ScaleLineInput.vue'
+import { type Scale } from 'scale-workshop-core'
 import { FIFTH, FIFTH_12TET } from '@/constants'
 import { useModalStore } from '@/stores/modal'
-import { useScaleStore } from '@/stores/scale'
-import { decimalString } from '@/utils'
 
-defineProps<{
-  show: boolean
+const props = defineProps<{
+  scale: Scale
+  centsFractionDigits: number
+  decimalFractionDigits: number
 }>()
 
-const emit = defineEmits(['done', 'cancel'])
+const emit = defineEmits(['update:scale', 'cancel'])
 
 const modal = useModalStore()
-const scale = useScaleStore()
 
-function modify(expand = true) {
-  scale.sourceText += `\nstretch(${decimalString(modal.stretchAmount)})\ncents(£, ${scale.centsFractionDigits})`
-  if (expand) {
-    const { visitor, defaults } = scale.getUserScopeVisitor()
-    scale.sourceText = visitor.expand(defaults)
-  }
-  scale.computeScale()
-  emit('done')
+function modify() {
+  emit(
+    'update:scale',
+    props.scale.stretch(modal.stretchAmount).mergeOptions({
+      centsFractionDigits: props.centsFractionDigits,
+      decimalFractionDigits: props.decimalFractionDigits
+    })
+  )
 }
 </script>
 
 <template>
-  <Modal :show="show" @confirm="modify" @cancel="$emit('cancel')">
+  <Modal @confirm="modify" @cancel="$emit('cancel')">
     <template #header>
       <h2>Stretch/compress scale</h2>
     </template>
@@ -72,13 +72,6 @@ function modify(expand = true) {
           <label for="stretch-into">Stretch reference into target</label>
           <button @click="modal.calculateStretchAmount">Calculate</button>
         </div>
-      </div>
-    </template>
-    <template #footer>
-      <div class="btn-group">
-        <button @click="modify(true)">OK</button>
-        <button @click="$emit('cancel')">Cancel</button>
-        <button @click="modify(false)">Raw</button>
       </div>
     </template>
   </Modal>

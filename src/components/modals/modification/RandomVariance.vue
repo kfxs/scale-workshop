@@ -1,31 +1,41 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import Modal from '@/components/ModalDialog.vue'
+import type { Scale } from 'scale-workshop-core'
 import { useModalStore } from '@/stores/modal'
-import { useScaleStore } from '@/stores/scale'
-import { centString } from '@/utils'
 
-defineProps<{
-  show: boolean
+const EPSILON = 1e-6
+
+const props = defineProps<{
+  scale: Scale
+  centsFractionDigits: number
+  decimalFractionDigits: number
 }>()
 
-const emit = defineEmits(['done', 'cancel'])
+const emit = defineEmits(['update:scale', 'cancel'])
 
 const modal = useModalStore()
-const scale = useScaleStore()
 
-function modify(expand = true) {
-  scale.sourceText += `\nrandomVariance(${centString(modal.varianceAmount)}, ${modal.varyEquave})\ncents(£, ${scale.centsFractionDigits})`
-  if (expand) {
-    const { visitor, defaults } = scale.getUserScopeVisitor()
-    scale.sourceText = visitor.expand(defaults)
+const equave = computed(() => {
+  if (Math.abs(props.scale.equave.totalCents() - 1200) < EPSILON) {
+    return 'octave'
   }
-  scale.computeScale()
-  emit('done')
+  return 'equave'
+})
+
+function modify() {
+  emit(
+    'update:scale',
+    props.scale.vary(modal.varianceAmount, modal.varyEquave).mergeOptions({
+      centsFractionDigits: props.centsFractionDigits,
+      decimalFractionDigits: props.decimalFractionDigits
+    })
+  )
 }
 </script>
 
 <template>
-  <Modal :show="show" @confirm="modify" @cancel="$emit('cancel')">
+  <Modal @confirm="modify" @cancel="$emit('cancel')">
     <template #header>
       <h2>Random variance</h2>
     </template>
@@ -38,15 +48,8 @@ function modify(expand = true) {
         </div>
         <div class="control checkbox-container">
           <input id="vary-equave" type="checkbox" v-model="modal.varyEquave" />
-          <label for="vary-equave">Vary the {{ scale.nameOfEquave }}</label>
+          <label for="vary-equave"> Vary the {{ equave }}</label>
         </div>
-      </div>
-    </template>
-    <template #footer>
-      <div class="btn-group">
-        <button @click="modify(true)">OK</button>
-        <button @click="$emit('cancel')">Cancel</button>
-        <button @click="modify(false)">Raw</button>
       </div>
     </template>
   </Modal>
